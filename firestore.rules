@@ -12,15 +12,38 @@ service cloud.firestore {
     function userDoc() {
       return get(/databases/$(database)/documents/users/$(uid())).data;
     }
+    // Treat disabled users as 'guest' for all role checks. The admin-lock
+    // feature sets users/{uid}.status = 'disabled'; the client signs them
+    // out, but a malicious client can call the REST API with a valid ID
+    // token and bypass that. Folding status into role() means every
+    // downstream check (isTeacher / isSubAdmin / isAdmin via role()==admin)
+    // automatically denies disabled accounts.
     function role() {
-      return isSignedIn() && exists(/databases/$(database)/documents/users/$(uid()))
-        ? userDoc().role : 'guest';
+      return !isSignedIn() ? 'guest'
+        : !exists(/databases/$(database)/documents/users/$(uid())) ? 'guest'
+        : userDoc().status == 'disabled' ? 'guest'
+        : userDoc().role;
     }
     function isAdmin() {
-      return isSignedIn() && (request.auth.token.email == 'phuvinhtrannguyen@gmail.com' || role() == 'admin');
+      // Disabled accounts lose admin access too (same reasoning as above).
+      // The hardcoded admin email bypasses role() but must still be active;
+      // if the admin doc exists with status='disabled' they go back to guest.
+      return isSignedIn()
+        && (!exists(/databases/$(database)/documents/users/$(uid()))
+            || userDoc().status != 'disabled')
+        && (request.auth.token.email == 'phuvinhtrannguyen@gmail.com' || role() == 'admin');
     }
     function isSubAdmin() { return role() == 'subadmin'; }
     function isTeacher() { return role() == 'teacher' || isAdmin() || isSubAdmin(); }
+    // True iff the caller is signed in AND not disabled. For writers whose
+    // role doesn't matter (submissions/events — any signed-in student may
+    // write their own), we still gate on isActive so a disabled account
+    // cannot spam the system via REST.
+    function isActive() {
+      return isSignedIn()
+        && (!exists(/databases/$(database)/documents/users/$(uid()))
+            || userDoc().status != 'disabled');
+    }
 
     // ---------------- users ----------------
     match /users/{userId} {
@@ -82,11 +105,11 @@ service cloud.firestore {
       allow create, delete: if isAdmin();
       // Admin may update freely.
       allow update: if isAdmin();
-      // Allow key redemption: a signed-in user can mark the key as used by
-      // themselves, but only the `usedBy` / `usedAt` fields may change, and only
-      // if the key has not expired. This prevents a malicious client from
-      // clearing `expiresAt` in the same update to redeem expired keys.
-      allow update: if isSignedIn()
+      // Allow key redemption: a signed-in, non-disabled user can mark the
+      // key as used by themselves, but only the `usedBy` / `usedAt` fields
+      // may change, and only if the key has not expired. Excluding disabled
+      // accounts prevents a locked-out user from burning unrelated keys.
+      allow update: if isActive()
         && resource.data.usedBy == null
         && request.resource.data.usedBy == uid()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usedBy','usedAt'])
@@ -144,7 +167,7 @@ service cloud.firestore {
       // Require auth — even anonymous students go through Firebase Anonymous
       // Auth (signInAnonymously) when joining via #join/<examId>. Without this,
       // a bot could call the Firestore REST API to spam submissions with score:1.
-      allow create: if isSignedIn()
+      allow create: if isActive()
         && request.resource.data.examId is string
         && exists(/databases/$(database)/documents/exams/$(request.resource.data.examId))
         && request.resource.data.teacherId == get(/databases/$(database)/documents/exams/$(request.resource.data.examId)).data.teacherId
@@ -172,7 +195,7 @@ service cloud.firestore {
       // studentId:"alice-uid"), framing them on the teacher's dashboard.
       // The #join flow now always signs users in with a real account, so
       // studentId == uid() is enforceable across all legitimate callers.
-      allow create: if isSignedIn()
+      allow create: if isActive()
         && request.resource.data.examId is string
         && exists(/databases/$(database)/documents/exams/$(request.resource.data.examId))
         && request.resource.data.teacherId == get(/databases/$(database)/documents/exams/$(request.resource.data.examId)).data.teacherId
