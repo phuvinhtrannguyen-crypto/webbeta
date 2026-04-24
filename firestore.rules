@@ -156,11 +156,15 @@ service cloud.firestore {
     // ---------------- events (violations, logs) ----------------
     match /events/{eid} {
       allow read: if isSignedIn() && (isAdmin() || resource.data.teacherId == uid());
-      // Require auth — anonymous students go through signInAnonymously on
-      // the #join flow, so every legitimate event creator has a uid. Leaving
-      // this `if true` lets a bot spam forged violation events via the REST
-      // API to pollute a teacher's dashboard.
-      allow create: if isSignedIn();
+      // Require auth AND validate that the event actually belongs to the exam
+      // it claims. Without the examId/teacherId cross-check, any signed-in
+      // user (including an anon student from a different exam) could write
+      // forged violation events with an arbitrary teacherId and pollute that
+      // teacher's dashboard.
+      allow create: if isSignedIn()
+        && request.resource.data.examId is string
+        && exists(/databases/$(database)/documents/exams/$(request.resource.data.examId))
+        && request.resource.data.teacherId == get(/databases/$(database)/documents/exams/$(request.resource.data.examId)).data.teacherId;
       allow update, delete: if isAdmin();
     }
 
