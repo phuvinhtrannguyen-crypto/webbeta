@@ -139,6 +139,10 @@ p{margin:0 0 .6em;line-height:1.6;color:var(--text-dim)}
 .btn:active{transform:translateY(0)}
 .btn:focus-visible{outline:none;box-shadow:var(--ring)}
 .btn[disabled],.btn.is-disabled{opacity:.55;cursor:not-allowed;transform:none!important}
+.btn svg{width:18px;height:18px;flex:0 0 auto}
+.btn-lg svg{width:20px;height:20px}
+.btn-sm svg{width:15px;height:15px}
+.btn-icon svg{width:18px;height:18px}
 .btn-primary{--btn-bg:var(--gradient-primary);--btn-fg:#fff;--btn-br:transparent;box-shadow:0 10px 24px rgba(124,92,255,.35)}
 .btn-primary:hover{box-shadow:0 14px 32px rgba(124,92,255,.5)}
 .btn-accent{--btn-bg:var(--gradient-accent);--btn-fg:#2b0f1b;--btn-br:transparent}
@@ -154,6 +158,7 @@ p{margin:0 0 .6em;line-height:1.6;color:var(--text-dim)}
 .btn .sp{width:16px;height:16px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:spin 1s linear infinite}
 /* ----- Chips / Badges ----- */
 .chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border:1px solid var(--stroke);border-radius:999px;background:var(--surface-3);color:var(--text-dim);font-size:12px;font-weight:500}
+.chip svg{width:14px;height:14px;flex:0 0 auto}
 .chip.is-primary{border-color:rgba(124,92,255,.45);background:rgba(124,92,255,.14);color:#cfc4ff}
 .chip.is-success{border-color:rgba(50,213,131,.45);background:rgba(50,213,131,.14);color:#a5f0c8}
 .chip.is-warning{border-color:rgba(255,176,32,.45);background:rgba(255,176,32,.14);color:#ffd993}
@@ -249,11 +254,15 @@ p{margin:0 0 .6em;line-height:1.6;color:var(--text-dim)}
 .main{padding:22px;display:flex;flex-direction:column;gap:18px;min-width:0}
 /* Collapsible side on small screens */
 .menu-btn{display:none}
+.side-backdrop{display:none}
 @media (max-width:960px){
   .shell{grid-template-columns:1fr}
-  .side{position:fixed;left:-280px;top:0;height:100vh;width:260px;transition:left .2s ease;z-index:40;box-shadow:var(--shadow-lg)}
+  .side{position:fixed;left:-300px;top:0;height:100vh;width:280px;transition:left .22s ease;z-index:41;box-shadow:var(--shadow-lg)}
   .side.open{left:0}
   .menu-btn{display:inline-flex}
+  /* Tap outside to close */
+  .side-backdrop{position:fixed;inset:0;background:rgba(3,5,14,.55);backdrop-filter:blur(4px);z-index:40;opacity:0;pointer-events:none;transition:opacity .18s ease}
+  .side-backdrop.open{display:block;opacity:1;pointer-events:auto}
 }
 /* ----- Modal ----- */
 .modal-backdrop{position:fixed;inset:0;background:rgba(2,4,14,.55);backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;z-index:100;padding:20px;animation:fadeIn .15s ease}
@@ -361,8 +370,9 @@ p{margin:0 0 .6em;line-height:1.6;color:var(--text-dim)}
 body.student-active{user-select:none!important;-webkit-user-select:none!important}
 body.student-active *{caret-color:auto}
 body.student-active input,body.student-active textarea{user-select:text!important;-webkit-user-select:text!important}
-.iconbtn{display:inline-grid;place-items:center;width:34px;height:34px;border-radius:10px;color:var(--text-dim);transition:background .12s ease,color .12s ease}
+.iconbtn{display:inline-grid;place-items:center;width:36px;height:36px;border-radius:10px;color:var(--text-dim);transition:background .12s ease,color .12s ease;flex:0 0 auto}
 .iconbtn:hover{background:var(--surface-3);color:var(--text)}
+.iconbtn svg{width:18px;height:18px}
 .seg{display:inline-flex;background:var(--surface-3);border:1px solid var(--stroke);border-radius:10px;padding:3px;gap:2px}
 .seg button{padding:6px 10px;border-radius:8px;font-size:13px;color:var(--text-dim)}
 .seg button.active{background:var(--gradient-primary);color:#fff}
@@ -744,6 +754,15 @@ async function ensureUserProfile(user){
    handled via an idempotent retry: if the key is already `usedBy == uid()`
    we skip the key write and just retry the user upgrade. */
 async function redeemTeacherKey(keyCode, user){
+  // Pre-flight: only a 'guest' can be upgraded to teacher by the Firestore
+  // rule. If we let a student/admin/etc. reach step 1 below, the key would
+  // be marked usedBy == this user but step 2 would fail, burning the key
+  // permanently with no self-service recovery.
+  const meSnap = await getDoc(doc(db, "users", user.uid));
+  const myRole = meSnap.exists() ? (meSnap.data().role || "guest") : "guest";
+  if (myRole !== "guest") {
+    throw new Error("Tài khoản này đã có quyền khác, không thể redeem key. Hãy đăng ký tài khoản mới.");
+  }
   const keyRef = doc(db, "teacherKeys", keyCode);
   const snap = await getDoc(keyRef);
   if (!snap.exists()) throw new Error("Key không tồn tại");
@@ -977,8 +996,13 @@ function buildShell({role="teacher", nav=[], active="", title="", children=[]}){
   // Topbar + main
   const right = el("div",{style:{minWidth:0,display:"flex",flexDirection:"column"}});
   const topbar = el("header",{class:"topbar"});
-  const menu = el("button",{class:"iconbtn menu-btn",onclick:()=>{ side.classList.toggle("open"); }});
+  const backdrop = el("div",{class:"side-backdrop",onclick:()=>{ side.classList.remove("open"); backdrop.classList.remove("open"); }});
+  const menu = el("button",{class:"iconbtn menu-btn",onclick:()=>{ side.classList.toggle("open"); backdrop.classList.toggle("open"); }});
   menu.appendChild(icon("menu"));
+  // Close drawer after any sidebar nav click on mobile
+  side.querySelectorAll(".nav a").forEach(a => a.addEventListener("click", () => {
+    if (window.matchMedia("(max-width:960px)").matches) { side.classList.remove("open"); backdrop.classList.remove("open"); }
+  }));
   const roleBadge = el("span",{class:"badge "+(role==="admin"?"is-admin":role==="teacher"?"is-teacher":role==="student"?"is-student":""),text: role.toUpperCase()});
   topbar.append(
     menu,
@@ -993,7 +1017,7 @@ function buildShell({role="teacher", nav=[], active="", title="", children=[]}){
   const main = el("main",{class:"main"});
   children.forEach(c => c && main.appendChild(c));
   right.append(topbar, main);
-  shell.append(side, right);
+  shell.append(side, backdrop, right);
   return shell;
 }
 
@@ -1432,8 +1456,10 @@ function teacherTab(tab){
 
 function teacherOverview(){
   const wrap = el("div",{class:"stack"});
-  // Check if teacher, if not, show upgrade flow
-  if (!isTeacher(state.profile)) {
+  // Check if teacher; if role is specifically 'guest' show upgrade flow.
+  // Other non-teacher roles (e.g. student) can't redeem without burning the
+  // key, so we hide the UI for them.
+  if (!isTeacher(state.profile) && state.profile && state.profile.role === "guest") {
     const p = el("div",{class:"panel stack"});
     p.append(
       el("div",{class:"card-h"},[el("div",{class:"card-t"},[icon("key"),el("span",{text:"Bạn chưa phải giáo viên"})])]),
@@ -2216,7 +2242,10 @@ function teacherProfile(){
       ])
     ])
   );
-  if (!isTeacher(state.profile) || state.profile.role === "guest") {
+  // Only show key-redeem UI to guests — students/teachers/admins can’t
+  // redeem and would burn the key on a failed step 2. Explicit eligibility
+  // avoids the ambiguous `!isTeacher || role==='guest'` mix below.
+  if (state.profile && state.profile.role === "guest") {
     const input = el("input",{class:"input",placeholder:"Nhập key giáo viên"});
     const btn = el("button",{class:"btn btn-primary",onclick:async()=>{
       try { await redeemTeacherKey(input.value.trim().toUpperCase(), state.user); if (state.profile) state.profile.role="teacher"; toast.success("Đã nâng quyền giáo viên"); navigate("teacher",{tab:"overview"}); }
@@ -3051,26 +3080,66 @@ window.ExamHub.showHelp = showHelp;
    ===================================================== */
 
 /* Responsive tweaks */
+@media (max-width:720px){
+  .table th,.table td{padding:9px 10px;font-size:13px}
+  /* Dashboard grids stack single-column */
+  .g-2,.g-3,.g-4{grid-template-columns:1fr !important}
+  /* Topbar: tighter, hide breadcrumb */
+  .topbar{padding:10px 14px;gap:8px}
+  .topbar .crumb{display:none}
+  .topbar .search{display:none}
+  /* Row items wrap onto new lines cleanly */
+  .row{gap:8px}
+  /* Modal takes up the entire screen */
+  .modal{width:100% !important;max-height:100vh;border-radius:0;border-left:0;border-right:0}
+  .modal-f{flex-direction:column-reverse;align-items:stretch}
+  .modal-f .btn{width:100%}
+}
 @media (max-width:560px){
+  html{font-size:14.5px}
   .brand .tag{display:none}
   .topbar{padding:10px 12px}
   .topbar .title{font-size:16px}
-  .main{padding:14px;gap:14px}
-  .panel{padding:14px;border-radius:14px}
-  .card{padding:14px}
-  .q{padding:14px}
-  .q .stem{font-size:14.5px}
+  .main{padding:12px;gap:12px}
+  .panel{padding:12px;border-radius:14px}
+  .card{padding:12px;border-radius:14px}
+  .card-h{flex-wrap:wrap;gap:8px}
+  .card-t{font-size:15px}
+  .q{padding:12px}
+  .q .stem{font-size:14.5px;line-height:1.5}
+  .q .idx{font-size:12px}
   .modal-h,.modal-b,.modal-f{padding-left:14px;padding-right:14px}
-  .auth-box{padding:20px;border-radius:18px}
-  .result-card{padding:22px;border-radius:18px;margin:18px auto}
-  .result-score{font-size:56px}
-  .btn-lg{padding:12px 16px}
-  .stat{padding:14px}
-  .stat .v{font-size:24px}
-  .side{width:240px}
+  .auth-box{padding:18px;border-radius:18px}
+  .auth-wrap{padding:12px;grid-template-rows:1fr;min-height:100vh}
+  .result-card{padding:20px;border-radius:18px;margin:14px auto}
+  .result-score{font-size:48px}
+  .btn{padding:9px 14px;font-size:13.5px}
+  .btn-sm{padding:6px 10px;font-size:12.5px}
+  .btn-lg{padding:11px 16px;font-size:14.5px}
+  .btn-block.btn-lg{padding:12px 16px}
+  .btn-icon{width:34px;height:34px;padding:8px}
+  .stat{padding:12px}
+  .stat .v{font-size:22px}
+  .stat .k{font-size:11px}
+  .side{width:260px}
+  /* Command palette / input controls */
+  .input,.textarea,.select{font-size:15px} /* keeps iOS from zooming */
+  /* Dense lists: tighten spacing */
+  .stack{gap:10px}
+  /* Sticky submit-exam button at bottom */
+  .exam-body{padding:14px}
+  /* Chip overflow handling */
+  .chip{font-size:11.5px;padding:3px 8px}
+  /* Toasts slide from top edge, full-width */
+  .toasts{top:8px;right:8px;left:8px;max-width:none}
+  /* Fullscreen overlay edge-to-edge */
+  .modal-backdrop{padding:0}
 }
-@media (max-width:720px){
-  .table th,.table td{padding:9px 10px;font-size:13px}
+/* Very small phones */
+@media (max-width:380px){
+  .topbar .title{font-size:14.5px}
+  .result-score{font-size:44px}
+  .btn{padding:8px 12px;font-size:13px}
 }
 
 /* Landscape compact on phones */
