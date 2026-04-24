@@ -2569,7 +2569,12 @@ async function gradeExam(ex, answers){
   const score = total ? scoreSum/total : 0;
   return { score, correctCount, total, grading };
 }
-function normalize(s){ return String(s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9\s]/g," ").replace(/\s+/g," ").trim(); }
+// Normalize for fuzzy grading: lowercase, strip Vietnamese diacritics, strip
+// punctuation, and collapse whitespace entirely. Removing spaces (rather than
+// just collapsing them) keeps a bigram match between forms like "hanoi" and
+// "Hà Nội" well above the 0.95 full-credit threshold — otherwise "ha noi" vs
+// "hanoi" scores only ~0.67 and gets 0/1.
+function normalize(s){ return String(s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/đ/g,"d").replace(/[^a-z0-9]/g,""); }
 function stringSimilarity(a,b){
   if (!a && !b) return 1;
   if (!a || !b) return 0;
