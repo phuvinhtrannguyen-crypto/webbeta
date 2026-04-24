@@ -1,0 +1,98 @@
+rules_version = '2';
+// ExamHub · Firestore rules
+// Paste this into Firebase Console → Firestore Database → Rules.
+// Admin email: phuvinhtrannguyen@gmail.com
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() { return request.auth != null; }
+    function uid() { return request.auth.uid; }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(uid())).data;
+    }
+    function role() {
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(uid()))
+        ? userDoc().role : 'guest';
+    }
+    function isAdmin() {
+      return isSignedIn() && (request.auth.token.email == 'phuvinhtrannguyen@gmail.com' || role() == 'admin');
+    }
+    function isSubAdmin() { return role() == 'subadmin'; }
+    function isTeacher() { return role() == 'teacher' || isAdmin() || isSubAdmin(); }
+
+    // ---------------- users ----------------
+    match /users/{userId} {
+      allow read: if isSignedIn() && (userId == uid() || isTeacher() || isAdmin());
+      // Users can create their own profile; role must start as guest/student unless admin
+      allow create: if isSignedIn() && userId == uid();
+      allow update: if isSignedIn() && (
+        (userId == uid() && !('role' in request.resource.data.diff(resource.data).affectedKeys()))
+        || isAdmin()
+        || (isSubAdmin() && request.resource.data.role != 'admin' && request.resource.data.role != 'subadmin')
+        || (userId == uid() && request.resource.data.role == 'teacher' && resource.data.role == 'guest') // self-upgrade via key redemption
+      );
+      allow delete: if isAdmin();
+    }
+
+    // ---------------- teacherKeys ----------------
+    match /teacherKeys/{code} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+      // Allow key redemption: a signed-in user can mark the key as used by themselves.
+      allow update: if isSignedIn()
+        && resource.data.usedBy == null
+        && request.resource.data.usedBy == uid();
+    }
+
+    // ---------------- classes ----------------
+    match /classes/{cid} {
+      allow read: if isSignedIn();
+      allow create: if isTeacher() && request.resource.data.teacherId == uid();
+      allow update, delete: if isSignedIn() && (resource.data.teacherId == uid() || isAdmin());
+    }
+
+    // ---------------- students (managed by teacher) ----------------
+    match /students/{sid} {
+      allow read: if isSignedIn();
+      allow create: if isTeacher() && request.resource.data.teacherId == uid();
+      allow update, delete: if isSignedIn() && (resource.data.teacherId == uid() || isAdmin());
+    }
+
+    // ---------------- exams ----------------
+    match /exams/{eid} {
+      allow read: if true; // public read so join link works; guard content if needed
+      allow create: if isTeacher() && request.resource.data.teacherId == uid();
+      allow update, delete: if isSignedIn() && (resource.data.teacherId == uid() || isAdmin() || isSubAdmin());
+    }
+
+    // ---------------- submissions ----------------
+    match /submissions/{sid} {
+      allow read: if isSignedIn() && (resource.data.teacherId == uid() || resource.data.studentId == uid() || isAdmin());
+      allow create: if true; // allow anonymous submissions from join links
+      allow update, delete: if isSignedIn() && (resource.data.teacherId == uid() || isAdmin());
+    }
+
+    // ---------------- events (violations, logs) ----------------
+    match /events/{eid} {
+      allow read: if isSignedIn() && (isAdmin() || resource.data.teacherId == uid());
+      allow create: if true; // students (even anon) can log violations
+      allow update, delete: if isAdmin();
+    }
+
+    // ---------------- requests (teacher → admin) ----------------
+    match /requests/{rid} {
+      allow read: if isSignedIn() && (isAdmin() || resource.data.uid == uid());
+      allow create: if isSignedIn();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ---------------- global config ----------------
+    match /global/{docId} {
+      allow read: if isSignedIn(); // teachers need to read gemini key
+      allow write: if isAdmin();
+    }
+  }
+}
