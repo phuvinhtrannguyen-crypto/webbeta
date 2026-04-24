@@ -557,6 +557,29 @@ const toast = {
   info(t,m){ this.show("info",t,m); }
 };
 
+/* ---------- Auth error messages ---------- */
+function prettyAuthError(err){
+  const code = err?.code || err?.message || "";
+  const map = {
+    "auth/invalid-email": "Email không hợp lệ.",
+    "auth/invalid-credential": "Email hoặc mật khẩu không đúng.",
+    "auth/user-not-found": "Tài khoản không tồn tại.",
+    "auth/wrong-password": "Sai mật khẩu.",
+    "auth/email-already-in-use": "Email đã được sử dụng.",
+    "auth/weak-password": "Mật khẩu quá yếu (tối thiểu 6 ký tự).",
+    "auth/too-many-requests": "Thử quá nhiều lần. Vui lòng thử lại sau.",
+    "auth/popup-closed-by-user": "Bạn đã đóng cửa sổ đăng nhập.",
+    "auth/popup-blocked": "Trình duyệt chặn popup. Hãy cho phép popup rồi thử lại.",
+    "auth/network-request-failed": "Mất kết nối mạng. Kiểm tra internet rồi thử lại.",
+    "auth/unauthorized-domain": "Domain chưa được cấp phép trong Firebase Auth.",
+    "permission-denied": "Không đủ quyền. Kiểm tra lại rules Firestore.",
+    "unavailable": "Firestore tạm thời không kết nối được.",
+    "failed-precondition": "Firestore chưa được bật cho project. Hãy mở Firebase Console → Firestore Database → Create database."
+  };
+  for (const k of Object.keys(map)) if (code.includes(k)) return map[k];
+  return err?.message || "Đã xảy ra lỗi không xác định.";
+}
+
 /* ---------- Modal ---------- */
 const modalRoot = $("#modal-root");
 function openModal({title="", body=null, actions=null, size=""}){
@@ -630,8 +653,17 @@ function canAutofill(profile){ return isAdmin(profile) || isSubAdmin(profile); }
 /* ---------- Fetch / ensure user profile ---------- */
 async function ensureUserProfile(user){
   const ref = doc(db, "users", user.uid);
-  const snap = await getDoc(ref);
-  if (!snap.exists()) {
+  let snap = null;
+  // Retry getDoc a few times: Firestore sometimes throws "client is offline"
+  // on the very first call right after auth, before the connection establishes.
+  for (let i = 0; i < 3; i++) {
+    try { snap = await getDoc(ref); break; }
+    catch(err){
+      if (i === 2) throw err;
+      await new Promise(r => setTimeout(r, 600 * (i + 1)));
+    }
+  }
+  if (!snap || !snap.exists()) {
     const role = user.email === ADMIN_EMAIL ? "admin" : "guest";
     const profile = {
       uid:user.uid, email:user.email||"", displayName:user.displayName||(user.email?.split("@")[0]||"Người dùng"),
