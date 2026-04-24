@@ -1267,11 +1267,12 @@ function adminExams(){
           <button class="btn btn-danger btn-sm" data-act="delete">${ICONS.trash}<span>Xoá</span></button>
         </div>
       `;
-      c.querySelector('[data-act="view"]').onclick = () => showExamPreview(ex);
+      c.querySelector('[data-act="view"]').onclick = async () => { await loadExamAnswers(ex); showExamPreview(ex); };
       c.querySelector('[data-act="approve"]').onclick = () => updateDoc(doc(db,"exams",ex.id),{status:"approved",reviewedAt:serverTimestamp()}).then(()=>toast.success("Đã duyệt đề"));
       c.querySelector('[data-act="reject"]').onclick = () => updateDoc(doc(db,"exams",ex.id),{status:"rejected",reviewedAt:serverTimestamp()}).then(()=>toast.success("Đã từ chối đề"));
       c.querySelector('[data-act="delete"]').onclick = async () => {
         if (!await confirmDialog({title:"Xoá đề",message:"Xoá vĩnh viễn đề này?",danger:true})) return;
+        await deleteDoc(doc(db,"exams",ex.id,"private","answers")).catch(()=>{});
         await deleteDoc(doc(db,"exams",ex.id));
       };
       grid.appendChild(c);
@@ -1638,11 +1639,17 @@ function teacherExams(){
           <button class="btn btn-danger btn-sm" data-act="del">${ICONS.trash}</button>
         </div>`;
       card.querySelector("[data-act=copy]").onclick=()=>copyText(link);
-      card.querySelector("[data-act=edit]").onclick=()=>createExamDialog(ex);
+      card.querySelector("[data-act=edit]").onclick=async()=>{
+        // Pull in the private answers before opening the editor — the list
+        // card only has the public (answer-stripped) questions.
+        await loadExamAnswers(ex);
+        createExamDialog(ex);
+      };
       card.querySelector("[data-act=view]").onclick=()=>showExamPreview(ex);
       card.querySelector("[data-act=subs]").onclick=()=>showExamSubs(ex);
       card.querySelector("[data-act=del]").onclick=async()=>{
         if (!await confirmDialog({title:"Xoá đề",message:"Xác nhận xoá đề này?",danger:true})) return;
+        await deleteDoc(doc(db,"exams",ex.id,"private","answers")).catch(()=>{});
         await deleteDoc(doc(db,"exams",ex.id));
       };
       // Extra toolbar row — share (QR), unlock, publish
@@ -1779,7 +1786,10 @@ function showExamSubs(ex){
   openModal({title:`Bài nộp · ${ex.title}`, size:"xl", body, actions:[]});
 }
 
-function showSubmissionDetail(sub, ex){
+async function showSubmissionDetail(sub, ex){
+  // Load private answers so the teacher sees the correct-answer key alongside
+  // the student's answer in the per-question breakdown.
+  await loadExamAnswers(ex);
   const body = el("div",{class:"stack"});
   body.append(
     el("div",{class:"row"},[
@@ -1888,18 +1898,23 @@ function createExamDialog(edit=null){
     if (!title.value.trim()) return toast.warning("Thiếu tên đề");
     if (!questions.length) return toast.warning("Thiếu câu hỏi");
     save.classList.add("loading");
+    // Split answers out of the public exam doc before saving — the answer key
+    // lives in exams/{eid}/private/answers and is written separately below.
+    const publicQuestions = stripAnswersFromQuestions(questions);
     const payload = {
       title:title.value.trim(), description:desc.value.trim(),
       type:type.value, duration:Number(duration.value)||30,
       classId:classSel.value||null, className: state.cache.classes.find(c=>c.id===classSel.value)?.name||null,
       antiCheat: antiCheat.checked, requireFullscreen: requireFullscreen.checked, blockCopy: blockCopy.checked, requireLogin: requireLogin.checked,
       maxViolations: Number(maxViolations.value)||3,
-      questions, teacherId:state.user.uid, teacherEmail:state.user.email, status:"pending",
+      questions: publicQuestions, teacherId:state.user.uid, teacherEmail:state.user.email, status:"pending",
       updatedAt: serverTimestamp(), locked:false
     };
     try {
-      if (edit) await updateDoc(doc(db,"exams",edit.id), payload);
-      else { payload.createdAt = serverTimestamp(); await addDoc(collection(db,"exams"), payload); }
+      let examId;
+      if (edit) { examId = edit.id; await updateDoc(doc(db,"exams",examId), payload); }
+      else { payload.createdAt = serverTimestamp(); const ref = await addDoc(collection(db,"exams"), payload); examId = ref.id; }
+      await writeExamAnswers(examId, questions);
       toast.success("Đã lưu đề"); m.close();
     } catch(err){ toast.error("Không lưu được", err.message); }
     finally { save.classList.remove("loading"); }
@@ -2256,6 +2271,18 @@ function renderJoin(params){
     // key must be stable across reloads so the per-student anti-cheat lock
     // survives a page refresh for the same student identity.
     state.anonStudent = { name: name.value.trim(), code: code.value.trim() };
+    // Sign in anonymously so submissions.create can require isSignedIn() and
+    // still work for the #join flow. Without this, Firestore rules must allow
+    // unauthenticated writes and bots can spam forged submissions.
+    startBtn.classList.add("loading");
+    try {
+      if (!auth.currentUser) await signInAnonymously(auth);
+    } catch(err) {
+      startBtn.classList.remove("loading");
+      toast.error("Không vào được phòng thi", err.message||String(err));
+      return;
+    }
+    startBtn.classList.remove("loading");
     navigate("exam",{examId, anon:true});
   }});
   startBtn.append(icon("play"),el("span",{text:"Bắt đầu làm bài"}));
@@ -2412,7 +2439,9 @@ function runExam(container, ex, anon){
     const done = Object.keys(answers).filter(k=>answers[k]!=null && answers[k]!=="").length;
     prog.firstChild.style.width = Math.round(done/(ex.questions.length||1)*100)+"%";
   }
-  function autofillAll(){
+  async function autofillAll(){
+    // Admin/subadmin feature — pull private answers before auto-filling.
+    await loadExamAnswers(ex);
     ex.questions.forEach((q,i) => {
       if (q.type==="mcq") {
         const idx = typeof q.answer === "number" ? q.answer : (typeof q.answer==="string"? "ABCDE".indexOf(q.answer.toUpperCase()):0);
@@ -2524,6 +2553,10 @@ function runExam(container, ex, anon){
     if (submitted) return; submitted = true;
     cleanup();
     if (document.fullscreenElement) document.exitFullscreen().catch(()=>{});
+    // Pull answers from the private subcollection just-in-time for grading.
+    // The main exam doc no longer carries answer fields (prevents casual
+    // answer leakage via the public exam doc's REST read).
+    await loadExamAnswers(ex);
     // Grade
     const { score, correctCount, total, grading } = await gradeExam(ex, answers);
     // Save submission
@@ -2539,6 +2572,37 @@ function runExam(container, ex, anon){
     state.route="result";
     appRoot.replaceChildren(renderResult({ex, answers, grading, score, correctCount, total, violations, timedOut, wasLocked}));
   }
+}
+
+/* ---------- Private answer storage helpers ----------
+   Correct answers are no longer embedded in the public `exams/{eid}` document —
+   they live in `exams/{eid}/private/answers` so that a trivial REST read of
+   the exams listing doesn't leak answer keys. Client-side grading (including
+   the anonymous #join flow) fetches this subdoc just-in-time at submission
+   time. A fully hardened design would grade server-side in a Cloud Function;
+   these helpers are the minimum structural step in that direction. */
+async function writeExamAnswers(examId, questions){
+  const answers = (questions||[]).map(q => q.answer ?? null);
+  await setDoc(doc(db,"exams",examId,"private","answers"), {
+    answers, updatedAt: serverTimestamp()
+  });
+}
+async function loadExamAnswers(ex){
+  if (!ex || !ex.id) return ex;
+  try {
+    const s = await getDoc(doc(db,"exams",ex.id,"private","answers"));
+    if (s.exists()) {
+      const arr = s.data().answers || [];
+      ex.questions = (ex.questions||[]).map((q,i) => ({ ...q, answer: arr[i] }));
+    }
+  } catch(err) { console.warn("loadExamAnswers failed", err); }
+  return ex;
+}
+function stripAnswersFromQuestions(questions){
+  return (questions||[]).map(q => {
+    const { answer, ...rest } = q || {};
+    return rest;
+  });
 }
 
 /* ---------- Grading ---------- */
@@ -2653,6 +2717,18 @@ if (auth) {
   onAuthStateChanged(auth, async (user) => {
     // hash routing for join links
     const hash = location.hash || "";
+    // Anonymous (signInAnonymously) users are a "virtual" identity used only so
+    // submissions.create can require isSignedIn(). Never create or load a user
+    // profile for them, and never reroute them away from the current exam flow
+    // (otherwise clicking "Bắt đầu làm bài" would reset the user to the join
+    // screen right after the anonymous sign-in succeeds).
+    if (user?.isAnonymous) {
+      state.user = user;
+      state.profile = null;
+      if (state.route === "exam" || state.route === "result" || state.route === "join") return;
+      if (hash.startsWith("#join/")) { navigate("join",{examId: hash.slice(6)}); return; }
+      return;
+    }
     if (hash.startsWith("#join/")) {
       const examId = hash.slice(6);
       state.user = user || null;

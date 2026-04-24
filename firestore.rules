@@ -45,7 +45,12 @@ service cloud.firestore {
         // the lock entirely.
         (userId == uid() && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role','status']))
         || isAdmin()
-        || (isSubAdmin() && request.resource.data.role != 'admin' && request.resource.data.role != 'subadmin')
+        // Subadmin may modify other users, but must not touch admins or other
+        // subadmins — either before OR after the update. Checking only the
+        // incoming role would let a subadmin demote an admin to 'teacher'.
+        || (isSubAdmin()
+            && resource.data.role != 'admin' && resource.data.role != 'subadmin'
+            && request.resource.data.role != 'admin' && request.resource.data.role != 'subadmin')
         || (userId == uid()
             && request.resource.data.role == 'teacher'
             && resource.data.role == 'guest'
@@ -88,10 +93,29 @@ service cloud.firestore {
     }
 
     // ---------------- exams ----------------
+    // The main exam document holds title/description/questions (stems/options)
+    // but NOT the correct answers — those live in the /private subcollection
+    // below so the public-read exam doc no longer leaks answer keys via a
+    // trivial Firestore REST call on the exams collection.
     match /exams/{eid} {
-      allow read: if true; // public read so join link works; guard content if needed
+      allow read: if true; // public read so join link works
       allow create: if isTeacher() && request.resource.data.teacherId == uid();
       allow update, delete: if isSignedIn() && (resource.data.teacherId == uid() || isAdmin() || isSubAdmin());
+
+      // Correct answers (and anything else sensitive per-exam) live here.
+      // Read is still permissive because client-side grading (including the
+      // anonymous #join flow) needs the plaintext answers to compute a score
+      // without a Cloud Function. Moving answers out of the main exam doc
+      // prevents casual leakage via the exams/ REST listing; a proper fix
+      // (hiding answers from students entirely) requires server-side grading.
+      // Write is restricted to the exam's creator / admin.
+      match /private/{docId} {
+        allow read: if true;
+        allow create, update: if isAdmin()
+          || (isTeacher() && get(/databases/$(database)/documents/exams/$(eid)).data.teacherId == uid());
+        allow delete: if isAdmin()
+          || (isTeacher() && get(/databases/$(database)/documents/exams/$(eid)).data.teacherId == uid());
+      }
     }
 
     // ---------------- submissions ----------------
@@ -102,8 +126,11 @@ service cloud.firestore {
     // score forgery on its own — for full integrity grading should move to Cloud Functions.
     match /submissions/{sid} {
       allow read: if isSignedIn() && (resource.data.teacherId == uid() || resource.data.studentId == uid() || isAdmin());
-      allow create: if
-        request.resource.data.examId is string
+      // Require auth — even anonymous students go through Firebase Anonymous
+      // Auth (signInAnonymously) when joining via #join/<examId>. Without this,
+      // a bot could call the Firestore REST API to spam submissions with score:1.
+      allow create: if isSignedIn()
+        && request.resource.data.examId is string
         && exists(/databases/$(database)/documents/exams/$(request.resource.data.examId))
         && request.resource.data.teacherId == get(/databases/$(database)/documents/exams/$(request.resource.data.examId)).data.teacherId
         && request.resource.data.studentName is string
