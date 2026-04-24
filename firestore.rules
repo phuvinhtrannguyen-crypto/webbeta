@@ -39,11 +39,15 @@ service cloud.firestore {
       // transaction; a client calling updateDoc directly without consuming a key
       // will fail the get() check below.
       allow update: if isSignedIn() && (
-        // Self-edit: may NOT touch admin-controlled fields (role, status).
+        // Self-edit: may NOT touch admin-controlled fields (role, status, email).
         // status is used for admin account locking (index.html disables a user),
         // so allowing a disabled user to flip it back to 'active' would bypass
-        // the lock entirely.
-        (userId == uid() && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role','status']))
+        // the lock entirely. email is defended because the client-side
+        // isAdmin() previously consulted profile.email — a user could rewrite
+        // their own doc's email to the admin address and trick the UI into
+        // revealing the admin dashboard. The client was also hardened to use
+        // auth.email instead of profile.email, but rule-level defense stays.
+        (userId == uid() && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role','status','email']))
         || isAdmin()
         // Subadmin may modify other users, but must not touch admins or other
         // subadmins — either before OR after the update. Checking only the

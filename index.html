@@ -686,7 +686,15 @@ window.addEventListener("beforeunload", unsubscribeAll);
    - roles: admin | subadmin | teacher | student | guest
    - Admin is fixed by ADMIN_EMAIL; others are stored per user.
    ========================================================= */
-function isAdmin(profile){ return profile && (profile.role === "admin" || profile.email === ADMIN_EMAIL); }
+// Admin is determined by (a) the role stored in the user doc OR (b) the
+// Firebase Auth email — never by the user-doc email, which a user can rewrite
+// on their own profile (self-edit rule only blocks role/status). Using
+// state.user.email here guards against a client-side UI escalation where
+// someone overwrites their own profile.email to ADMIN_EMAIL.
+function isAdmin(profile){
+  if (profile && profile.role === "admin") return true;
+  return !!(state && state.user && state.user.email === ADMIN_EMAIL);
+}
 function isSubAdmin(profile){ return profile && profile.role === "subadmin"; }
 function isTeacher(profile){ return profile && (profile.role === "teacher" || isAdmin(profile) || isSubAdmin(profile)); }
 function canAutofill(profile){ return isAdmin(profile) || isSubAdmin(profile); }
