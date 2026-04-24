@@ -1967,12 +1967,11 @@ function teacherAutogen(){
     const blanks = (text.match(/\.{6,}/g)||[]).length;
     if (!blanks) return toast.warning("Không tìm thấy dấu ........ nào");
     if (answers.length < blanks) return toast.warning(`Cần ít nhất ${blanks} đáp án — đang có ${answers.length}`);
-    // Create one question per blank
-    const parts = text.split(/(\.{6,})/);
-    let idx=0;
+    // Create one question per blank (idx must reset per iteration)
     const qs = [];
     for (let i=0;i<blanks;i++) {
-      qs.push({ type:"fill", stem:text.replace(/\.{6,}/g,(m,off)=>{ idx++; return idx-1===i?"______":m; }), answer: answers[i] });
+      let idx=0;
+      qs.push({ type:"fill", stem:text.replace(/\.{6,}/g,(m)=>{ const cur=idx++; return cur===i?"______":m; }), answer: answers[i] });
     }
     const ex = { title:"Đề đục lỗ", description:"Sinh tự động từ file điền khuyết", type:"exam", duration:20, antiCheat:true, questions: qs };
     createExamDialog(ex);
@@ -2269,6 +2268,14 @@ function renderJoin(params){
   return wrap;
 }
 
+/* Per-student lock persistence — avoids locking the whole exam for all students
+   when only one student exceeds the violation cap. */
+function studentLockKey(examId, anon){
+  const sid = anon ? (state.anonStudent?.code || state.anonStudent?.name) : state.user?.uid;
+  if (!sid) return null;
+  return `examhub.lock.${examId}.${sid}`;
+}
+
 /* =========================================================
    EXAM VIEW (the student takes the exam)
    - Fullscreen guard
@@ -2287,6 +2294,11 @@ function renderExam(params){
     const ex = {id:examSnap.id, ...examSnap.data()};
     if (ex.locked) return appRoot.replaceChildren(renderLocked({examTitle:ex.title, reason:"Bài thi đã bị khoá bởi giáo viên"}));
     if (ex.requireLogin && !state.user) { navigate("auth"); return; }
+    // Per-student violation lock: stored locally so one cheater doesn't block others.
+    const lockKey = studentLockKey(ex.id, params.anon);
+    if (lockKey && localStorage.getItem(lockKey) === "1") {
+      return appRoot.replaceChildren(renderLocked({examTitle:ex.title, reason:"Bạn đã vượt số lần thoát cho phép. Liên hệ giáo viên để mở lại."}));
+    }
     runExam(inner, ex, params.anon);
   })();
   return root;
@@ -2443,7 +2455,11 @@ function runExam(container, ex, anon){
       toast.warning(`Cảnh báo gian lận ${violations}/${ex.maxViolations||3}`, "Quay lại toàn màn hình để tiếp tục.");
       if (violations >= (ex.maxViolations||3)) {
         locked = true;
-        updateDoc(doc(db,"exams",ex.id),{ locked:true }).catch(()=>{});
+        // Per-student lock only: do NOT write locked:true on the shared exam doc
+        // (that would block every other student). Persist a client-side lock flag
+        // so the same student can't just refresh to bypass the cap.
+        const lk = studentLockKey(ex.id, anon);
+        if (lk) { try { localStorage.setItem(lk, "1"); } catch(_){} }
         submitExam(false, true);
       }
     }

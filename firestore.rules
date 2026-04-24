@@ -25,8 +25,14 @@ service cloud.firestore {
     // ---------------- users ----------------
     match /users/{userId} {
       allow read: if isSignedIn() && (userId == uid() || isTeacher() || isAdmin());
-      // Users can create their own profile; role must start as guest/student unless admin
-      allow create: if isSignedIn() && userId == uid();
+      // Users can create their own profile; role must start as guest/student.
+      // The admin account (hardcoded email) may self-create with role 'admin'.
+      allow create: if isSignedIn() && userId == uid()
+        && (
+          request.resource.data.role == 'guest'
+          || request.resource.data.role == 'student'
+          || (request.auth.token.email == 'phuvinhtrannguyen@gmail.com' && request.resource.data.role == 'admin')
+        );
       allow update: if isSignedIn() && (
         (userId == uid() && !('role' in request.resource.data.diff(resource.data).affectedKeys()))
         || isAdmin()
@@ -68,9 +74,23 @@ service cloud.firestore {
     }
 
     // ---------------- submissions ----------------
+    // NOTE: client-side grading is used, so score/grading fields are present on create.
+    // We validate that (a) examId references a real exam, (b) teacherId matches the exam's
+    // teacherId (prevents spoofing another teacher's dashboard), (c) score is in [0,1],
+    // and (d) the basic student identity fields are strings. This does not prevent
+    // score forgery on its own — for full integrity grading should move to Cloud Functions.
     match /submissions/{sid} {
       allow read: if isSignedIn() && (resource.data.teacherId == uid() || resource.data.studentId == uid() || isAdmin());
-      allow create: if true; // allow anonymous submissions from join links
+      allow create: if
+        request.resource.data.examId is string
+        && exists(/databases/$(database)/documents/exams/$(request.resource.data.examId))
+        && request.resource.data.teacherId == get(/databases/$(database)/documents/exams/$(request.resource.data.examId)).data.teacherId
+        && request.resource.data.studentName is string
+        && request.resource.data.studentName.size() > 0
+        && request.resource.data.studentName.size() <= 120
+        && request.resource.data.score is number
+        && request.resource.data.score >= 0
+        && request.resource.data.score <= 1;
       allow update, delete: if isSignedIn() && (resource.data.teacherId == uid() || isAdmin());
     }
 
