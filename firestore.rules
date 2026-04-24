@@ -156,15 +156,18 @@ service cloud.firestore {
     // ---------------- events (violations, logs) ----------------
     match /events/{eid} {
       allow read: if isSignedIn() && (isAdmin() || resource.data.teacherId == uid());
-      // Require auth AND validate that the event actually belongs to the exam
-      // it claims. Without the examId/teacherId cross-check, any signed-in
-      // user (including an anon student from a different exam) could write
-      // forged violation events with an arbitrary teacherId and pollute that
-      // teacher's dashboard.
+      // Require auth, validate that the event belongs to a real exam + its
+      // teacher, AND bind studentId to the caller's uid. Without the last
+      // clause, a malicious signed-in student could forge violation events
+      // attributed to another student (e.g. Bob writes count:99 events with
+      // studentId:"alice-uid"), framing them on the teacher's dashboard.
+      // The #join flow now always signs users in with a real account, so
+      // studentId == uid() is enforceable across all legitimate callers.
       allow create: if isSignedIn()
         && request.resource.data.examId is string
         && exists(/databases/$(database)/documents/exams/$(request.resource.data.examId))
-        && request.resource.data.teacherId == get(/databases/$(database)/documents/exams/$(request.resource.data.examId)).data.teacherId;
+        && request.resource.data.teacherId == get(/databases/$(database)/documents/exams/$(request.resource.data.examId)).data.teacherId
+        && request.resource.data.studentId == uid();
       allow update, delete: if isAdmin();
     }
 
