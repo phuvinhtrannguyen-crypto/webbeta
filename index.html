@@ -1029,7 +1029,7 @@ function renderAdmin(){
   const navLinks = shell.querySelectorAll(".nav a");
   navLinks.forEach(a => a.classList.remove("active"));
   const idx = {overview:0,users:1,keys:2,exams:3,requests:4,settings:5}[tab] ?? 0;
-  if (navLinks[idx+1]) navLinks[idx+1].classList.add("active");
+  if (navLinks[idx]) navLinks[idx].classList.add("active");
   return shell;
 }
 
@@ -1403,7 +1403,7 @@ function renderTeacher(){
   const navLinks = shell.querySelectorAll(".nav a");
   navLinks.forEach(a => a.classList.remove("active"));
   const idx = {overview:0,classes:1,exams:2,autogen:3,stats:4,profile:5}[tab] ?? 0;
-  if (navLinks[idx+1]) navLinks[idx+1].classList.add("active");
+  if (navLinks[idx]) navLinks[idx].classList.add("active");
   return shell;
 }
 
@@ -2210,7 +2210,7 @@ function renderStudent(){
   ];
   const shell = buildShell({role:"student", nav, active:"home", title:"Bài tập của tôi", children:[body]});
   shell.querySelectorAll(".nav a").forEach(a=>a.classList.remove("active"));
-  shell.querySelectorAll(".nav a")[1]?.classList.add("active");
+  shell.querySelectorAll(".nav a")[0]?.classList.add("active");
   const p = el("div",{class:"panel"});
   p.innerHTML = `<div class="card-h"><div class="card-t">${ICONS.exam}<span>Bài thi / luyện đề</span></div></div>
   <p class="dim">Đây là nơi xem các đề được giao. Bạn cũng có thể mở link giáo viên gửi trực tiếp để vào làm bài.</p>`;
@@ -2251,7 +2251,11 @@ function renderJoin(params){
   const startBtn = el("button",{class:"btn btn-primary btn-block btn-lg",onclick:async()=>{
     if (!name.value.trim()) return toast.warning("Nhập tên để tiếp tục");
     // Anonymous session in-memory
-    state.anonStudent = { name: name.value.trim(), code: code.value.trim()||uid(6) };
+    // Keep the optional code as the student typed it (may be empty). A random
+    // id is only used for the DB studentId, never for the lock key — the lock
+    // key must be stable across reloads so the per-student anti-cheat lock
+    // survives a page refresh for the same student identity.
+    state.anonStudent = { name: name.value.trim(), code: code.value.trim() };
     navigate("exam",{examId, anon:true});
   }});
   startBtn.append(icon("play"),el("span",{text:"Bắt đầu làm bài"}));
@@ -2271,7 +2275,16 @@ function renderJoin(params){
 /* Per-student lock persistence — avoids locking the whole exam for all students
    when only one student exceeds the violation cap. */
 function studentLockKey(examId, anon){
-  const sid = anon ? (state.anonStudent?.code || state.anonStudent?.name) : state.user?.uid;
+  let sid;
+  if (anon) {
+    // Prefer the name (always typed) for a stable identifier across reloads;
+    // fall back to typed code. Lowercase+trim to avoid case-only mismatches.
+    const nm = (state.anonStudent?.name||"").trim().toLowerCase();
+    const cd = (state.anonStudent?.code||"").trim().toLowerCase();
+    sid = nm ? (cd ? `${nm}|${cd}` : nm) : cd;
+  } else {
+    sid = state.user?.uid;
+  }
   if (!sid) return null;
   return `examhub.lock.${examId}.${sid}`;
 }
@@ -2439,9 +2452,15 @@ function runExam(container, ex, anon){
   if (cheat && ex.requireFullscreen !== false) {
     setTimeout(enterFullscreen, 80);
   }
+  let lastViolationAt = 0;
   function onVisChange(){
     if (!cheat || submitted) return;
     if (document.hidden || !document.fullscreenElement) {
+      // Debounce: visibilitychange + fullscreenchange + blur all fire for a
+      // single exit-fullscreen action. Only count once per ~1s window.
+      const now = Date.now();
+      if (now - lastViolationAt < 1000) return;
+      lastViolationAt = now;
       violations++;
       $("#v-val").textContent = violations;
       updateDoc(doc(db,"exams",ex.id),{}).catch(()=>{});

@@ -45,11 +45,18 @@ service cloud.firestore {
     // ---------------- teacherKeys ----------------
     match /teacherKeys/{code} {
       allow read: if isSignedIn();
-      allow create, update, delete: if isAdmin();
-      // Allow key redemption: a signed-in user can mark the key as used by themselves.
+      allow create, delete: if isAdmin();
+      // Admin may update freely.
+      allow update: if isAdmin();
+      // Allow key redemption: a signed-in user can mark the key as used by
+      // themselves, but only the `usedBy` / `usedAt` fields may change, and only
+      // if the key has not expired. This prevents a malicious client from
+      // clearing `expiresAt` in the same update to redeem expired keys.
       allow update: if isSignedIn()
         && resource.data.usedBy == null
-        && request.resource.data.usedBy == uid();
+        && request.resource.data.usedBy == uid()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usedBy','usedAt'])
+        && (!('expiresAt' in resource.data) || resource.data.expiresAt == null || resource.data.expiresAt > request.time);
     }
 
     // ---------------- classes ----------------
@@ -110,8 +117,9 @@ service cloud.firestore {
     }
 
     // ---------------- global config ----------------
+    // Only teachers / admins may read the Gemini API key; students must not see it.
     match /global/{docId} {
-      allow read: if isSignedIn(); // teachers need to read gemini key
+      allow read: if isTeacher();
       allow write: if isAdmin();
     }
   }

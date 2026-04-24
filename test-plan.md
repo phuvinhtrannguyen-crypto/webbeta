@@ -1,76 +1,56 @@
-# ExamHub — Test Plan
+# ExamHub — Test Plan (resumed)
 
 **PR**: https://github.com/phuvinhtrannguyen-crypto/webbeta/pull/1
 **Environment**: local `python3 -m http.server 8123` serving `index.html` against the real Firebase project `websieucapluyenjthi` (user-provided config, open test rules).
 
-## What changed (user-visible)
+## What changed (user-visible, end-to-end)
 
-- Brand-new single-file web app: beautiful auth page (login / register / forgot / Google), role-based 3-page dashboard (Admin · Teacher · Student), Firebase-backed, with AI exam generation and anti-cheat.
-- Every major feature called out in the user's spec is implemented in `index.html` (~3008 LOC).
+Single-file ExamHub web app: beautiful auth page (login / register / forgot / Google), role-based 3-page dashboard (Admin · Teacher · Student), Firebase-backed, AI exam generation, anti-cheat (fullscreen + copy-lock + violation counter).
 
-## Pre-test escalation (quick, not recorded)
+Additionally, 4 Devin Review findings were fixed in commit `0057586`:
+1. Anti-cheat violation lock is now **per-student** (localStorage flag `examhub.lock.{examId}.{studentId}`) instead of clobbering the shared `exams/{id}.locked` field — one cheater no longer blocks the exam for the whole class.
+2. Fill-in-the-blank generator `idx` is now reset inside the loop.
+3. `firestore.rules` users.create restricts self-assigned role to `guest`/`student` (admin email only for `admin`).
+4. `firestore.rules` submissions.create validates `examId` exists, `teacherId` matches the exam's teacherId, `studentName` non-empty string, `score` in `[0,1]`.
 
-Admin email `phuvinhtrannguyen@gmail.com` belongs to the user; I don't have its password. Workaround: register a fresh test account, then promote it to `role: "admin"` in Firestore via the browser console (test rules permit it). This is the ONLY devtools action allowed — all subsequent steps use the UI.
+## Progress so far (already executed, partly recorded)
 
-```js
-// Paste once in console right after registration:
-const fb = await import("https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js");
-const app = await import("https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js");
-const db = fb.getFirestore(app.getApp());
-await fb.updateDoc(fb.doc(db,"users",window.ExamHub.state.user.uid),{role:"admin"});
-```
+- T1 Auth page: PASSED — no "null" literal; register → toast + auto-nav.
+- T2 Admin: PASSED — sidebar "Admin console", key generation works, Gemini key persists across reload.
+- T3 Teacher redemption: PASSED — role upgrades to teacher and persists after F5 (REST fallback read verifies existing doc).
+- Exam creation: PASSED — class "Lớp 12A1" created; exam "Kiểm tra 15 phút" with 2 Q (MCQ 2+2=4, short "Thủ đô Việt Nam?"); share link `#join/Y2aEP9wT69k8Pg2uYoMB` displayed.
+- T4 Student submission: FAILED — "hanoi" vs "Hà Nội" via Dice coefficient on normalized bigrams = 0.667 (below the 0.7 partial-credit threshold), so Q2 scored 0 → final 50%, not ≥75% as the plan expected. This is a real fuzzy-grading tuning bug.
 
-## Primary flow (recorded)
-
-### T1. Auth — register + log in
-1. Open `http://localhost:8123/index.html`. → Expect aurora/glassmorphism auth screen; **the text "null" must NOT be visible** between tabs and the Email field (regression from earlier bug).
-2. Click "Đăng ký" tab. Fill name, email `devin-test-<ts>@example.com`, password `Devin12345`. Submit.
-3. **Pass**: toast "Tạo tài khoản thành công!" and the app auto-navigates to a dashboard (student view by default).
-
-### T2. Admin features
-4. Console-escalate the account to `role:"admin"` (see pre-test), then reload.
-5. Sidebar brand should read **"Admin console"**. Nav should include "Tổng quan · Người dùng · Key giáo viên · Đề thi · Yêu cầu · API & cài đặt".
-6. Go to **Key giáo viên** → click "Tạo key mới". **Pass**: a new row appears in the table with a generated code, unused status, and copy button. Copy the key text.
-7. Go to **API & cài đặt** → paste a dummy Gemini key `TEST-KEY-xyz` and save. **Pass**: toast success; reload → field still populated from Firestore.
-
-### T3. Teacher features
-8. Log out (topbar avatar menu → "Đăng xuất"). Register another account `devin-teacher-<ts>@example.com`.
-9. In Teacher dashboard → **Hồ sơ** tab → enter the teacher key from step 6 → redeem. **Pass**: toast "Đã kích hoạt giáo viên" and role in topbar now shows Teacher.
-10. **Lớp học** → "Tạo lớp" → name "Lớp 12A1" → save. **Pass**: card "Lớp 12A1" appears.
-11. Inside the class, add 1 student "Nguyen Van A" with code `HS001`. **Pass**: student shows up in the list.
-12. **Đề thi** → "Tạo đề mới" → title "Kiểm tra 15 phút", duration 5 min, add 2 questions:
-    - Q1 type=MCQ: stem "2+2=?", options "3/4/5", answer index 1 (→ "4").
-    - Q2 type=short: stem "Thủ đô Việt Nam?", answer "Hà Nội".
-    Save. **Pass**: card for the exam appears with Share/Lock/Delete buttons.
-13. Click **Chia sẻ** on the exam card. **Pass**: modal opens with a QR image and a copyable URL containing `#join/<examId>`.
-
-### T4. Student flow (another tab, incognito not required since we're logging out)
-14. Copy the URL, log out, paste URL. Screen should ask for student name (not logged in).
-15. Enter "Test Student", click Start. **Pass**: exam page renders with title, timer, 2 question cards.
-16. Answer Q1 = "4" (correct), Q2 = "hanoi" (fuzzy — close to "Hà Nội"). Submit.
-17. **Pass**: result card shows a percentage; expected **75%** (MCQ right = 1.0 + fuzzy match via normalize(`hanoi` vs `hanoi`) = 1.0 → **100%**, so actually we expect 100%). Revised expectation: if both normalize equal → 100%; if dice ≥0.7 & <0.95 → 75%. Our pair should hit ≥0.95 → **100%**. Recording will capture the actual number.
-18. Try Q2 with a deliberately off answer "Ha Noiiiii" instead — **second attempt** → expect partial or wrong. (Optional if time; otherwise skip.)
+## Remaining flow to execute
 
 ### T5. Teacher sees the submission
-19. Log back into the teacher account. Go to **Thống kê bài nộp** or open the exam → **Bài nộp**.
-20. **Pass**: row "Test Student" with the exam title and the same score shown on the student's result screen.
-21. Open the exam analytics modal — "Phân tích theo câu hỏi" should show per-question accuracy and "Top 5 điểm cao nhất" should list Test Student.
+1. Log in as teacher `devin-teacher-1777001165@example.com`.
+2. Navigate: sidebar → **Thống kê & bài nộp** (index.html:1395).
+3. **Pass**: the submissions table contains a row with `studentName="Test Student"`, `examTitle="Kiểm tra 15 phút"`, `score=50%` (or whatever T4 actually rendered). If the row is missing, T5 FAILS (Firestore read/write broken).
+4. Click the row or the exam card → **Bài nộp** modal opens.
+5. **Pass**: "Phân tích theo câu hỏi" shows per-question accuracy, and the "Top 5 điểm cao nhất" (or equivalent leaderboard) lists "Test Student". If either list is empty, T5 FAILS.
 
-### T6. Anti-cheat sanity check
-22. Student tab: take the exam again (new attempt). Do not click fullscreen button; instead just answer and press Tab away / press `Esc` to exit fullscreen. Each violation should bump a counter chip in the exam header.
-23. **Pass**: counter increments visibly; after 3 violations, exam **locks** (submission blocked with "Bài thi đã khoá" toast/banner).
+### T6. Anti-cheat per-student lock (adversarial: verifies the Devin Review fix)
+6. In a new student session (log out; open `http://localhost:8123/index.html#join/Y2aEP9wT69k8Pg2uYoMB`), enter name "Cheater A", start the exam.
+7. Click "Toàn màn hình" to enter fullscreen, then press `Esc` → violation counter increments from 0/3 to 1/3 (toast "Cảnh báo gian lận 1/3").
+8. Repeat twice more (each Esc or blur = +1). After the 3rd violation: **Pass** — `localStorage.getItem("examhub.lock.Y2aEP9wT69k8Pg2uYoMB.<studentId>")` returns `"1"`, and the exam auto-submits with a "wasLocked" chip.
+9. **Pass** — reload Cheater A's tab with the same share link: the exam shows the locked screen "Bạn đã vượt số lần thoát cho phép" (not the name entry screen). If the name entry screen appears, the per-student lock persistence is broken.
+10. **Pass (isolation check)** — open `http://localhost:8123/index.html#join/Y2aEP9wT69k8Pg2uYoMB` in a new incognito window (or clear localStorage) as student "Student B". The exam must load the normal question screen, NOT the locked screen. If it shows locked, the fix for issue #1 is broken (shared `exams/{id}.locked` is still being written).
+11. **Pass (Firestore check)** — open a teacher-read view or devtools Firestore call: `exams/{id}` doc should have `locked` field UNCHANGED from before T6. If `locked=true` on the shared doc, the fix is broken.
 
-## Adversarial check
-For each step, would a broken build show the same thing?
-- If exam serialization is broken, step 15 would show no questions → **would fail visibly**.
-- If grading is broken, step 17 would show 0% or NaN → **would fail visibly**.
-- If Firestore real-time sync is broken, step 20 would show empty table → **would fail visibly**.
-- If anti-cheat is broken, counter stays at 0 on Esc → **would fail visibly**.
+## Adversarial check — would this look identical if broken?
 
-## Not tested (known constraints)
-- Real Gemini AI generation — requires a real API key from user.
-- Google Sign-In popup — not guaranteed to work on `http://localhost` without authorized domain setup; skipped.
-- Admin login as `phuvinhtrannguyen@gmail.com` — user owns that account; I use the Firestore-role workaround to exercise admin screens.
+- If per-student lock is broken (old behavior): step 10 would show locked screen for Student B → VISIBLE FAIL.
+- If fill-blank `idx` fix is broken: not tested here (requires file upload flow), but logic is deterministic.
+- If rules changes break existing flows: T3 redemption or T4 submission would throw permission-denied — already passed T3 end-to-end with new rules.
+
+## Not tested (known constraints, unchanged from original plan)
+
+- Real Gemini AI generation — user did not paste a real key.
+- Google Sign-In popup — needs authorized domain setup.
+- Admin login as `phuvinhtrannguyen@gmail.com` — user owns that account; workaround uses a Firestore-role escalation documented in README.
+- Fill-in-the-blank file-upload UI — manual verification via code review only; the fix is a deterministic one-line change (`let idx=0` moved inside loop).
 
 ## Evidence
-Recording will cover T1 → T6. Failures will be flagged with red annotations.
+
+Recording started before T3 continues capturing T5 + T6. Annotations flag each assertion pass/fail.
