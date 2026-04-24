@@ -64,17 +64,19 @@
   --font-mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
 }
 [data-theme="light"]{
-  --bg-0:#f7f8ff;
-  --bg-1:#eef1ff;
+  --bg-0:#f6f7ff;
+  --bg-1:#eceffe;
   --bg-2:#e4e8ff;
   --bg-3:#d8deff;
-  --surface:#ffffffcc;
-  --surface-2:#ffffffee;
-  --surface-3:#f1f3ff;
-  --stroke:#d9deff;
-  --stroke-soft:#e6e9ff;
-  --text:#0f1430;
-  --text-dim:#454b74;
+  --surface:#fffffff2;
+  --surface-2:#fffffff7;
+  --surface-3:#eef0ff;
+  --surface-hi:#e2e6ff;
+  --stroke:#cdd3fa;
+  --stroke-soft:#dee3ff;
+  --stroke-hi:#a6afef;
+  --text:#0c1030;
+  --text-dim:#3a4070;
   --text-mute:#7b83a8;
   --gradient-bg: radial-gradient(1200px 800px at 10% 0%,#e7e9ff 0%,transparent 60%),
                  radial-gradient(900px 700px at 100% 10%,#ffe7f1 0%,transparent 55%),
@@ -83,9 +85,10 @@
   --shadow-md: 0 10px 30px rgba(40,60,160,.12);
   --shadow-lg: 0 24px 60px rgba(40,60,160,.18);
 }
-*{box-sizing:border-box}
-html,body{margin:0;padding:0;background:var(--bg-0);color:var(--text);font-family:var(--font-sans);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility}
-body{min-height:100vh;background:var(--gradient-bg) fixed;overflow-x:hidden}
+*{box-sizing:border-box;min-width:0}
+html,body{margin:0;padding:0;background:var(--bg-0);color:var(--text);font-family:var(--font-sans);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility;overflow-wrap:anywhere;word-break:break-word}
+html,body{max-width:100vw;overflow-x:hidden}
+body{min-height:100vh;background:var(--gradient-bg) fixed}
 a{color:var(--primary-3);text-decoration:none}
 a:hover{text-decoration:underline}
 img{max-width:100%;display:block}
@@ -249,6 +252,7 @@ p{margin:0 0 .6em;line-height:1.6;color:var(--text-dim)}
 /* ----- Topbar & Sidebar ----- */
 .shell{display:grid;grid-template-columns:260px 1fr;min-height:100vh}
 .side{background:linear-gradient(180deg,#0b1028 0%,#0b1028 60%,#0e1530 100%);border-right:1px solid var(--stroke);padding:18px 14px;display:flex;flex-direction:column;gap:10px;position:sticky;top:0;height:100vh;z-index:20}
+[data-theme="light"] .side{background:linear-gradient(180deg,#1a1f4a 0%,#1a1f4a 60%,#2a1f52 100%)}
 .brand{display:flex;align-items:center;gap:10px;padding:6px 6px 14px;border-bottom:1px solid var(--stroke-soft);margin-bottom:6px}
 .brand .logo{width:34px;height:34px;border-radius:10px;background:var(--gradient-primary);display:grid;place-items:center;box-shadow:0 6px 18px rgba(124,92,255,.45)}
 .brand .logo svg{width:20px;height:20px;color:#fff}
@@ -536,6 +540,8 @@ const ICONS = {
   wand: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4V2"/><path d="M15 16v-2"/><path d="M8 9h2"/><path d="M20 9h2"/><path d="M17.8 11.8 19 13"/><path d="M15 9h0"/><path d="M17.8 6.2 19 5"/><path d="m3 21 9-9"/><path d="M12.2 6.2 11 5"/></svg>`,
   check: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`,
   eye: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`,
+  sun: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>`,
+  moon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z"/></svg>`,
   eyeoff: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20C5 20 1 12 1 12a18.49 18.49 0 0 1 3.9-4.77"/><path d="M9.9 5.08A10.94 10.94 0 0 1 12 5c7 0 11 7 11 7a18.44 18.44 0 0 1-2.33 3.53"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`,
   copy: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`,
   link: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>`,
@@ -1023,13 +1029,16 @@ function buildShell({role="teacher", nav=[], active="", title="", children=[]}){
     if (window.matchMedia("(max-width:960px)").matches) { side.classList.remove("open"); backdrop.classList.remove("open"); }
   }));
   const roleBadge = el("span",{class:"badge "+(role==="admin"?"is-admin":role==="teacher"?"is-teacher":role==="student"?"is-student":""),text: role.toUpperCase()});
+  const themeBtn = el("button",{class:"iconbtn tooltip","data-tip":"Đổi chủ đề",onclick:()=>{ toggleTheme(); themeBtn.replaceChildren(icon(document.documentElement.dataset.theme==="light"?"moon":"sun")); }});
+  themeBtn.appendChild(icon(document.documentElement.dataset.theme==="light"?"moon":"sun"));
   topbar.append(
     menu,
-    el("div",{},[
+    el("div",{style:{minWidth:0,overflow:"hidden"}},[
       el("div",{class:"crumb",text:"ExamHub / " + role}),
       el("div",{class:"title",text:title})
     ]),
     el("div",{class:"spacer"}),
+    themeBtn,
     roleBadge,
     ...(state.profile?.role === "subadmin" ? [el("span",{class:"badge is-sub",text:"SUBADMIN"})] : [])
   );
@@ -1758,7 +1767,15 @@ function showExamSubs(ex){
   body.appendChild(leader);
   const list = el("div",{class:"table-wrap"});
   body.appendChild(list);
-  const u = onSnapshot(query(collection(db,"submissions"), where("examId","==",ex.id)), s => {
+  // Firestore rules require `resource.data.teacherId == uid()` for non-admin
+  // readers. A list query must satisfy that rule for ALL docs returned, which
+  // means the query itself must constrain teacherId. Omitting this clause
+  // causes `permission-denied` under production rules (works under test-mode
+  // rules, which is why the earlier test didn't catch it).
+  const subsQ = isAdmin(state.profile)
+    ? query(collection(db,"submissions"), where("examId","==",ex.id))
+    : query(collection(db,"submissions"), where("examId","==",ex.id), where("teacherId","==",state.user.uid));
+  const u = onSnapshot(subsQ, s => {
     const t = el("table",{class:"table"});
     t.innerHTML = `<thead><tr><th>Học sinh</th><th>Điểm</th><th>Số câu đúng</th><th>Lần thoát</th><th>Nộp lúc</th><th></th></tr></thead>`;
     const tb = el("tbody");
@@ -1888,6 +1905,20 @@ function createExamDialog(edit=null){
   const requireFullscreen = el("input",{type:"checkbox",checked: edit?.requireFullscreen !== false});
   const blockCopy = el("input",{type:"checkbox",checked: edit?.blockCopy !== false});
   const requireLogin = el("input",{type:"checkbox",checked: !!edit?.requireLogin});
+  // Deep config — open/close window, password gate, hide score / answers.
+  const tsToLocal = (t) => {
+    if (!t) return "";
+    const d = new Date(typeof t==="number" ? t : (t.seconds ? t.seconds*1000 : t));
+    const pad = n => String(n).padStart(2,"0");
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+  const openTime = el("input",{class:"input",type:"datetime-local",value: tsToLocal(edit?.openTime)});
+  const closeTime = el("input",{class:"input",type:"datetime-local",value: tsToLocal(edit?.closeTime)});
+  const password = el("input",{class:"input",type:"text",placeholder:"Để trống = không cần mật khẩu",value: edit?.password||""});
+  const hideScore = el("input",{type:"checkbox",checked: !!edit?.hideScore});
+  const hideAnswers = el("input",{type:"checkbox",checked: !!edit?.hideAnswers});
+  const oneSubmission = el("input",{type:"checkbox",checked: !!edit?.oneSubmission});
+  const shuffleQuestions = el("input",{type:"checkbox",checked: !!edit?.shuffleQuestions});
   body.append(
     el("div",{class:"grid g-2"},[
       el("div",{class:"field"},[el("label",{text:"Tên đề"}), title]),
@@ -1906,6 +1937,20 @@ function createExamDialog(edit=null){
         el("label",{class:"switch"},[requireFullscreen, el("span",{text:"Bắt buộc fullscreen mới làm được"})]),
         el("label",{class:"switch"},[blockCopy, el("span",{text:"Khoá copy-paste trên trang HS"})]),
         el("label",{class:"switch"},[requireLogin, el("span",{text:"Bắt buộc học sinh đăng nhập"})]),
+      ])
+    ]),
+    el("details",{class:"cfg"},[
+      el("summary",{text:"Cấu hình nâng cao (thời gian mở, mật khẩu, ẩn điểm…)"}),
+      el("div",{class:"stack",style:{marginTop:"8px"}},[
+        el("div",{class:"grid g-2"},[
+          el("div",{class:"field"},[el("label",{text:"Mở đề lúc (tuỳ chọn)"}), openTime]),
+          el("div",{class:"field"},[el("label",{text:"Đóng đề lúc (tuỳ chọn)"}), closeTime]),
+        ]),
+        el("div",{class:"field"},[el("label",{text:"Mật khẩu vào đề (tuỳ chọn)"}), password]),
+        el("label",{class:"switch"},[hideScore, el("span",{text:"Ẩn điểm sau khi nộp (chỉ GV thấy)"})]),
+        el("label",{class:"switch"},[hideAnswers, el("span",{text:"Ẩn đáp án chi tiết sau khi nộp"})]),
+        el("label",{class:"switch"},[oneSubmission, el("span",{text:"Chỉ cho nộp 1 lần / tài khoản"})]),
+        el("label",{class:"switch"},[shuffleQuestions, el("span",{text:"Trộn thứ tự câu hỏi cho mỗi HS"})]),
       ])
     ])
   );
@@ -1962,12 +2007,29 @@ function createExamDialog(edit=null){
     // Split answers out of the public exam doc before saving — the answer key
     // lives in exams/{eid}/private/answers and is written separately below.
     const publicQuestions = stripAnswersFromQuestions(questions);
+    const parseLocalTs = (v) => {
+      if (!v) return null;
+      const t = new Date(v).getTime();
+      return Number.isFinite(t) ? t : null;
+    };
+    const openMs = parseLocalTs(openTime.value);
+    const closeMs = parseLocalTs(closeTime.value);
+    if (openMs && closeMs && closeMs <= openMs) {
+      save.classList.remove("loading");
+      return toast.warning("Thời gian đóng đề phải sau thời gian mở");
+    }
     const payload = {
       title:title.value.trim(), description:desc.value.trim(),
       type:type.value, duration:Number(duration.value)||30,
       classId:classSel.value||null, className: state.cache.classes.find(c=>c.id===classSel.value)?.name||null,
       antiCheat: antiCheat.checked, requireFullscreen: requireFullscreen.checked, blockCopy: blockCopy.checked, requireLogin: requireLogin.checked,
       maxViolations: Number(maxViolations.value)||3,
+      openTime: openMs, closeTime: closeMs,
+      password: (password.value||"").trim() || null,
+      hideScore: !!hideScore.checked,
+      hideAnswers: !!hideAnswers.checked,
+      oneSubmission: !!oneSubmission.checked,
+      shuffleQuestions: !!shuffleQuestions.checked,
       questions: publicQuestions, teacherId:state.user.uid, teacherEmail:state.user.email, status:"pending",
       updatedAt: serverTimestamp(), locked:false
     };
@@ -2318,9 +2380,74 @@ function renderStudent(){
 }
 
 /* =========================================================
-   JOIN flow (when student opens link without login)
+   JOIN flow (student opens the share link)
+   - Previously we supported anonymous signin + manual name typing. Teachers
+     found this hurts tracking (one student can enter any name), so we now
+     route through a real login and, if the account has no displayName on
+     file yet, we force one-time input right after login before entering.
    ========================================================= */
 function renderJoin(params){
+  const wrap = el("div",{class:"screen",style:{minHeight:"100vh",display:"grid",placeItems:"center",padding:"20px"}});
+  const card = el("div",{class:"auth-box"});
+  const examId = params.examId;
+
+  // Case A: not signed in → force login and return to this join link.
+  if (!state.user || state.user.isAnonymous) {
+    card.innerHTML = `<h2 class="text-gradient">Vào phòng thi</h2>
+      <div class="sub">Đăng nhập để làm bài — giáo viên sẽ theo dõi tên thật của bạn.</div>`;
+    const loginBtn = el("button",{class:"btn btn-primary btn-block btn-lg",onclick:()=>{
+      try { sessionStorage.setItem("examhub:pendingJoin", examId); } catch(_){}
+      navigate("auth");
+    }});
+    loginBtn.append(icon("login")||icon("check"),el("span",{text:"Đăng nhập để tiếp tục"}));
+    const regBtn = el("button",{class:"btn btn-ghost btn-block",onclick:()=>{
+      try { sessionStorage.setItem("examhub:pendingJoin", examId); } catch(_){}
+      navigate("auth",{tab:"register"});
+    }, text:"Đăng ký tài khoản mới"});
+    card.append(el("div",{class:"stack"},[loginBtn, regBtn]));
+    wrap.appendChild(card);
+    return wrap;
+  }
+
+  // Case B: signed in but no displayName yet → mandatory name prompt once.
+  const profName = (state.profile?.displayName||"").trim();
+  if (!profName) {
+    card.innerHTML = `<h2 class="text-gradient">Bạn tên là gì?</h2>
+      <div class="sub">Giáo viên cần tên đầy đủ để chấm bài và theo dõi.
+      Tên này sẽ được lưu cho tài khoản của bạn và có thể đổi trong phần cài đặt.</div>`;
+    const name = el("input",{class:"input",placeholder:"Họ và tên đầy đủ",value:state.user.displayName||""});
+    const go = el("button",{class:"btn btn-primary btn-block btn-lg",onclick:async()=>{
+      const v = name.value.trim();
+      if (v.length < 2) return toast.warning("Nhập đầy đủ họ và tên");
+      go.classList.add("loading");
+      try {
+        await setDoc(doc(db,"users",state.user.uid), { displayName: v }, { merge:true });
+        state.profile = { ...(state.profile||{}), displayName: v };
+      } catch(err){
+        go.classList.remove("loading");
+        return toast.error("Không lưu được tên", err.message||String(err));
+      }
+      go.classList.remove("loading");
+      navigate("exam",{examId});
+    }});
+    go.append(icon("check"),el("span",{text:"Vào phòng thi"}));
+    card.append(el("div",{class:"stack"},[
+      el("div",{class:"field"},[el("label",{text:"Họ và tên"}), name]),
+      go
+    ]));
+    wrap.appendChild(card);
+    return wrap;
+  }
+
+  // Case C: signed in + named → auto-enter the exam.
+  navigate("exam",{examId});
+  return wrap;
+}
+
+/* =========================================================
+   Unused legacy anon-join fallback kept for reference.
+   ========================================================= */
+function _legacyRenderJoinUnused(params){
   const wrap = el("div",{class:"screen",style:{minHeight:"100vh",display:"grid",placeItems:"center",padding:"20px"}});
   const card = el("div",{class:"auth-box"});
   const examId = params.examId;
@@ -2329,15 +2456,7 @@ function renderJoin(params){
   const code = el("input",{class:"input",placeholder:"Mã HS (nếu có)"});
   const startBtn = el("button",{class:"btn btn-primary btn-block btn-lg",onclick:async()=>{
     if (!name.value.trim()) return toast.warning("Nhập tên để tiếp tục");
-    // Anonymous session in-memory
-    // Keep the optional code as the student typed it (may be empty). A random
-    // id is only used for the DB studentId, never for the lock key — the lock
-    // key must be stable across reloads so the per-student anti-cheat lock
-    // survives a page refresh for the same student identity.
     state.anonStudent = { name: name.value.trim(), code: code.value.trim() };
-    // Sign in anonymously so submissions.create can require isSignedIn() and
-    // still work for the #join flow. Without this, Firestore rules must allow
-    // unauthenticated writes and bots can spam forged submissions.
     startBtn.classList.add("loading");
     try {
       if (!auth.currentUser) await signInAnonymously(auth);
@@ -2398,10 +2517,55 @@ function renderExam(params){
     const ex = {id:examSnap.id, ...examSnap.data()};
     if (ex.locked) return appRoot.replaceChildren(renderLocked({examTitle:ex.title, reason:"Bài thi đã bị khoá bởi giáo viên"}));
     if (ex.requireLogin && !state.user) { navigate("auth"); return; }
+    // Exam open/close window gates.
+    const now = Date.now();
+    if (ex.openTime && now < ex.openTime) {
+      const d = new Date(ex.openTime).toLocaleString("vi-VN");
+      return appRoot.replaceChildren(renderLocked({examTitle:ex.title, reason:"Đề chưa mở. Sẽ mở lúc " + d + "."}));
+    }
+    if (ex.closeTime && now > ex.closeTime) {
+      const d = new Date(ex.closeTime).toLocaleString("vi-VN");
+      return appRoot.replaceChildren(renderLocked({examTitle:ex.title, reason:"Đề đã đóng lúc " + d + "."}));
+    }
+    // Password gate — uses prompt() for simplicity; not cryptographically
+    // strong (password is stored plaintext in the exam doc) but prevents
+    // casual share-link access.
+    if (ex.password) {
+      const entered = window.prompt("Đề thi yêu cầu mật khẩu:", "");
+      if (entered == null) { navigate(state.user ? "student" : "auth"); return; }
+      if (entered.trim() !== String(ex.password)) {
+        return appRoot.replaceChildren(renderLocked({examTitle:ex.title, reason:"Sai mật khẩu đề thi."}));
+      }
+    }
+    // One-submission-per-user gate (only applies to signed-in, non-anonymous
+    // students — anon sessions can't be reliably de-duped anyway).
+    if (ex.oneSubmission && state.user && !params.anon && !state.user.isAnonymous) {
+      try {
+        const existing = await getDocs(query(collection(db,"submissions"),
+          where("examId","==",ex.id), where("studentId","==",state.user.uid)));
+        if (!existing.empty) {
+          return appRoot.replaceChildren(renderLocked({examTitle:ex.title, reason:"Đề này chỉ cho nộp 1 lần. Bạn đã nộp rồi."}));
+        }
+      } catch(_){ /* rules may block list — fall through */ }
+    }
     // Per-student violation lock: stored locally so one cheater doesn't block others.
     const lockKey = studentLockKey(ex.id, params.anon);
     if (lockKey && localStorage.getItem(lockKey) === "1") {
       return appRoot.replaceChildren(renderLocked({examTitle:ex.title, reason:"Bạn đã vượt số lần thoát cho phép. Liên hệ giáo viên để mở lại."}));
+    }
+    // Per-student question shuffle. Keep a stable rng seed per student so
+    // reloading doesn't keep reshuffling within the same session.
+    if (ex.shuffleQuestions && Array.isArray(ex.questions)) {
+      const seed = (state.user?.uid || state.anonStudent?.name || "x") + "|" + ex.id;
+      let h = 0; for (let i=0;i<seed.length;i++){ h=((h<<5)-h)+seed.charCodeAt(i); h|=0; }
+      const rng = () => { h = (h*1664525 + 1013904223) | 0; return ((h>>>0) % 10000) / 10000; };
+      const order = ex.questions.map((_,i)=>i);
+      for (let i=order.length-1;i>0;i--){
+        const j = Math.floor(rng()*(i+1));
+        [order[i],order[j]] = [order[j],order[i]];
+      }
+      ex._questionOrder = order;
+      ex.questions = order.map(i => ex.questions[i]);
     }
     runExam(inner, ex, params.anon);
   })();
@@ -2574,50 +2738,105 @@ function runExam(container, ex, anon){
 
   /* ---------- Anti-cheat ---------- */
   const cheat = ex.antiCheat !== false;
+  let wakeLock = null;
+  async function requestWake(){
+    if (!("wakeLock" in navigator)) return;
+    try { wakeLock = await navigator.wakeLock.request("screen"); }
+    catch(_){ /* user gesture required or unsupported — ignore */ }
+  }
+  function releaseWake(){ try{ wakeLock && wakeLock.release(); } catch(_){} wakeLock = null; }
   async function enterFullscreen(){
     try { await document.documentElement.requestFullscreen({navigationUI:"hide"}); }
     catch(err){ toast.warning("Không bật được fullscreen", err.message||""); }
+    if ("keyboard" in navigator && navigator.keyboard && navigator.keyboard.lock) {
+      navigator.keyboard.lock(["Escape","F11"]).catch(()=>{});
+    }
+    // Try to lock orientation on phones to prevent layout thrash reveal.
+    try { if (screen.orientation && screen.orientation.lock) screen.orientation.lock("any").catch(()=>{}); } catch(_){}
   }
   if (cheat && ex.requireFullscreen !== false) {
     setTimeout(enterFullscreen, 80);
+    setTimeout(requestWake, 120);
+  }
+  // Record a baseline viewport height; if the visible viewport shrinks by
+  // more than ~20% while we're supposedly in fullscreen, a system chrome
+  // (notification shade, keyboard, overlay app) is covering part of the page.
+  // Mobile browsers don't expose these as blur/visibilitychange.
+  const baselineH = Math.max(window.innerHeight, screen.height || 0);
+  function viewportSuspicious(){
+    if (!cheat || submitted) return false;
+    const vh = (window.visualViewport ? window.visualViewport.height : window.innerHeight);
+    // Allow the virtual keyboard: if any input is focused we skip the check.
+    const ae = document.activeElement;
+    if (ae && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA")) return false;
+    if (baselineH > 200 && vh < baselineH * 0.8) return true;
+    return false;
   }
   let lastViolationAt = 0;
-  function onVisChange(){
+  function bumpViolation(reason){
     if (!cheat || submitted) return;
-    if (document.hidden || !document.fullscreenElement) {
-      // Debounce: visibilitychange + fullscreenchange + blur all fire for a
-      // single exit-fullscreen action. Only count once per ~1s window.
-      const now = Date.now();
-      if (now - lastViolationAt < 1000) return;
-      lastViolationAt = now;
-      violations++;
-      $("#v-val").textContent = violations;
-      updateDoc(doc(db,"exams",ex.id),{}).catch(()=>{});
-      // log event
-      addDoc(collection(db,"events"),{
-        type:"violation", reason: document.hidden?"hidden":"exit-fullscreen",
-        examId:ex.id, examTitle:ex.title, teacherId:ex.teacherId,
-        studentId, studentName, count:violations,
-        createdAt:serverTimestamp()
-      }).catch(()=>{});
-      toast.warning(`Cảnh báo gian lận ${violations}/${ex.maxViolations||3}`, "Quay lại toàn màn hình để tiếp tục.");
-      if (violations >= (ex.maxViolations||3)) {
-        locked = true;
-        // Per-student lock only: do NOT write locked:true on the shared exam doc
-        // (that would block every other student). Persist a client-side lock flag
-        // so the same student can't just refresh to bypass the cap.
-        const lk = studentLockKey(ex.id, anon);
-        if (lk) { try { localStorage.setItem(lk, "1"); } catch(_){} }
-        submitExam(false, true);
-      }
+    const now = Date.now();
+    // Debounce: visibilitychange + fullscreenchange + blur all fire for a
+    // single exit-fullscreen action. Only count once per ~1.2s window.
+    if (now - lastViolationAt < 1200) return;
+    lastViolationAt = now;
+    violations++;
+    $("#v-val").textContent = violations;
+    addDoc(collection(db,"events"),{
+      type:"violation", reason,
+      examId:ex.id, examTitle:ex.title, teacherId:ex.teacherId,
+      studentId, studentName, count:violations,
+      createdAt:serverTimestamp()
+    }).catch(()=>{});
+    toast.warning(`Cảnh báo gian lận ${violations}/${ex.maxViolations||3}`, "Quay lại toàn màn hình để tiếp tục.");
+    if (violations >= (ex.maxViolations||3)) {
+      locked = true;
+      const lk = studentLockKey(ex.id, anon);
+      if (lk) { try { localStorage.setItem(lk, "1"); } catch(_){} }
+      submitExam(false, true);
+      return;
+    }
+    // Try to silently re-enter fullscreen (requires recent user activation;
+    // may fail, in which case the UI keeps nagging until the user taps the
+    // "Toàn màn hình" button).
+    if (ex.requireFullscreen !== false && !document.fullscreenElement) {
+      document.documentElement.requestFullscreen({navigationUI:"hide"}).catch(()=>{});
     }
   }
+  function onVisChange(){
+    if (document.hidden) { bumpViolation("hidden"); return; }
+    if (ex.requireFullscreen !== false && !document.fullscreenElement) { bumpViolation("exit-fullscreen"); return; }
+  }
+  function onResizeSuspicious(){
+    if (viewportSuspicious()) bumpViolation("viewport-shrunk");
+  }
   const visHandler = onVisChange;
-  const fsHandler = onVisChange;
-  const blurHandler = onVisChange;
+  const fsHandler  = onVisChange;
+  const blurHandler = () => bumpViolation("blur");
+  const focusHandler = () => { if (document.hidden) bumpViolation("focus-hidden"); };
+  const hideHandler  = () => bumpViolation("pagehide");
+  const resizeHandler = onResizeSuspicious;
   document.addEventListener("visibilitychange", visHandler);
   document.addEventListener("fullscreenchange", fsHandler);
   window.addEventListener("blur", blurHandler);
+  window.addEventListener("focusout", focusHandler);
+  window.addEventListener("pagehide", hideHandler);
+  window.addEventListener("resize", resizeHandler);
+  if (window.visualViewport) window.visualViewport.addEventListener("resize", resizeHandler);
+  // Periodic poll: catches overlay windows that don't fire any DOM event
+  // (e.g. some Android floating-app modes). Every 2s check viewport + fs.
+  const pollT = setInterval(() => {
+    if (!cheat || submitted) return;
+    if (ex.requireFullscreen !== false && !document.fullscreenElement && !document.hidden) {
+      bumpViolation("not-fullscreen");
+    } else if (viewportSuspicious()) {
+      bumpViolation("viewport-shrunk");
+    }
+  }, 2000);
+  // Re-acquire wake lock after system release (e.g. returning from bg).
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && cheat && !submitted) requestWake();
+  });
   // Block copy/paste/ctx menu
   const blockCopy = ex.blockCopy !== false && cheat;
   const kblock = (e) => {
@@ -2641,13 +2860,22 @@ function runExam(container, ex, anon){
   }
   function cleanup(){
     clearInterval(timerI);
+    clearInterval(pollT);
     document.removeEventListener("visibilitychange", visHandler);
     document.removeEventListener("fullscreenchange", fsHandler);
     window.removeEventListener("blur", blurHandler);
+    window.removeEventListener("focusout", focusHandler);
+    window.removeEventListener("pagehide", hideHandler);
+    window.removeEventListener("resize", resizeHandler);
+    if (window.visualViewport) window.visualViewport.removeEventListener("resize", resizeHandler);
     document.removeEventListener("keydown", kblock, true);
     ["copy","cut","paste"].forEach(n => document.removeEventListener(n, copyBlock, true));
     document.removeEventListener("contextmenu", ctxBlock, true);
     document.body.classList.remove("student-active");
+    releaseWake();
+    if ("keyboard" in navigator && navigator.keyboard && navigator.keyboard.unlock) {
+      try { navigator.keyboard.unlock(); } catch(_){}
+    }
   }
   async function submitExam(timedOut=false, wasLocked=false){
     if (submitted) return; submitted = true;
@@ -2674,6 +2902,7 @@ function runExam(container, ex, anon){
         studentId, studentName, answers, grading, score, correctCount, total,
         violations, submittedAt: serverTimestamp(), timedOut, wasLocked, attemptNo: 1
       };
+      if (Array.isArray(ex._questionOrder)) sub.questionOrder = ex._questionOrder;
       await addDoc(collection(db,"submissions"), sub);
     } catch(err){ console.error(err); }
     // Result screen
@@ -2787,12 +3016,19 @@ function renderResult({ex, answers, grading, score, correctCount, total, violati
   const wrap = el("div",{class:"screen"});
   const card = el("div",{class:"result-card"});
   const pct = Math.round(score*100);
+  const hideScore = !!ex.hideScore;
+  const hideAnswers = !!ex.hideAnswers; // default: show answers (old behavior)
+  const scoreBlock = hideScore
+    ? `<div class="chip is-info">Đã nộp bài</div>
+       <div class="result-score" style="font-size:44px">✓</div>
+       <div class="dim fs-13" style="margin-top:6px">Điểm sẽ do giáo viên công bố.</div>`
+    : `<div class="chip is-${pct>=70?"success":pct>=40?"warning":"danger"}">${pct>=70?"Xuất sắc":pct>=40?"Cần cố gắng":"Chưa đạt"}</div>
+       <div class="result-score">${pct}%</div>`;
   card.innerHTML = `
-    <div class="chip is-${pct>=70?"success":pct>=40?"warning":"danger"}">${pct>=70?"Xuất sắc":pct>=40?"Cần cố gắng":"Chưa đạt"}</div>
-    <div class="result-score">${pct}%</div>
+    ${scoreBlock}
     <h2>${esc(ex.title||"")}</h2>
-    <div class="row" style="justify-content:center;gap:12px;margin-top:8px">
-      <span class="chip">${correctCount}/${total} câu đúng</span>
+    <div class="row" style="justify-content:center;gap:12px;margin-top:8px;flex-wrap:wrap">
+      ${hideScore ? "" : `<span class="chip">${correctCount}/${total} câu đúng</span>`}
       <span class="chip is-warning">${violations} lần thoát</span>
       ${timedOut?'<span class="chip is-danger">Hết giờ</span>':""}
       ${wasLocked?'<span class="chip is-danger">Khoá bài</span>':""}
@@ -2804,17 +3040,21 @@ function renderResult({ex, answers, grading, score, correctCount, total, violati
   `;
   wrap.appendChild(card);
   const qr = card.querySelector("#qr");
-  ex.questions.forEach((q,i) => {
-    const r = grading[i];
-    const ua = answers[i];
-    const row = el("div",{class:"q"});
-    const pill = r===true?'<span class="pill-score ok">Đúng</span>': r==="partial"?'<span class="pill-score mid">Một phần</span>': '<span class="pill-score bad">Sai</span>';
-    row.innerHTML = `<div class="idx">Câu ${i+1} ${pill}</div>
-      <div class="stem">${nl2br(q.stem||"")}</div>
-      <div class="fs-13"><b>Bạn trả lời:</b> ${esc(q.type==="mcq"? (q.options?.[ua]??"(trống)") : (Array.isArray(ua) ? ua.join(" / ") : (ua??"(trống)")))}</div>
-      <div class="fs-13 dim"><b>Đáp án đúng:</b> ${esc(q.type==="mcq"? (q.options?.[q.answer]??q.answer) : (Array.isArray(q.answer)?q.answer.join(" | "):q.answer))}</div>`;
-    qr.appendChild(row);
-  });
+  if (hideAnswers) {
+    qr.appendChild(el("div",{class:"dim fs-13",style:{textAlign:"center",padding:"12px"},text:"Giáo viên đã ẩn đáp án chi tiết cho bài này."}));
+  } else {
+    ex.questions.forEach((q,i) => {
+      const r = grading[i];
+      const ua = answers[i];
+      const row = el("div",{class:"q"});
+      const pill = hideScore ? "" : (r===true?'<span class="pill-score ok">Đúng</span>': r==="partial"?'<span class="pill-score mid">Một phần</span>': '<span class="pill-score bad">Sai</span>');
+      row.innerHTML = `<div class="idx">Câu ${i+1} ${pill}</div>
+        <div class="stem">${nl2br(q.stem||"")}</div>
+        <div class="fs-13"><b>Bạn trả lời:</b> ${esc(q.type==="mcq"? (q.options?.[ua]??"(trống)") : (Array.isArray(ua) ? ua.join(" / ") : (ua??"(trống)")))}</div>
+        <div class="fs-13 dim"><b>Đáp án đúng:</b> ${esc(q.type==="mcq"? (q.options?.[q.answer]??q.answer) : (Array.isArray(q.answer)?q.answer.join(" | "):q.answer))}</div>`;
+      qr.appendChild(row);
+    });
+  }
   card.querySelector("#back").onclick = () => {
     if (state.user) navigate(isAdmin(state.profile)?"admin":isTeacher(state.profile)?"teacher":"student");
     else { state.anonStudent=null; navigate("auth"); }
@@ -2875,6 +3115,15 @@ if (auth) {
     catch(err){ console.error(err); toast.error("Không tải được hồ sơ", prettyAuthError(err)); state.profile = null; }
     if (!state.profile) { navigate("auth"); return; }
     if (state.profile.status === "disabled") { toast.error("Tài khoản đã bị khoá"); await signOut(auth); return; }
+    // If the user started from a share link they were bounced to auth — after
+    // signing in, drop them back on the join flow instead of the dashboard.
+    let pending = null;
+    try { pending = sessionStorage.getItem("examhub:pendingJoin"); } catch(_){}
+    if (pending) {
+      try { sessionStorage.removeItem("examhub:pendingJoin"); } catch(_){}
+      navigate("join",{examId: pending});
+      return;
+    }
     if (isAdmin(state.profile) || isSubAdmin(state.profile)) navigate("admin",{tab:"overview"});
     else if (isTeacher(state.profile)) navigate("teacher",{tab:"overview"});
     else navigate("student");
@@ -3107,12 +3356,26 @@ window.ExamHub.showHelp = showHelp;
   .topbar{padding:10px 14px;gap:8px}
   .topbar .crumb{display:none}
   .topbar .search{display:none}
+  .topbar .title{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   /* Row items wrap onto new lines cleanly */
-  .row{gap:8px}
+  .row{gap:8px;flex-wrap:wrap}
+  .row.end{justify-content:flex-start}
+  /* Card headers wrap when title + chip collide */
+  .card-h{flex-wrap:wrap;gap:8px}
+  .card-t{min-width:0}
+  .card-t span{word-break:break-word}
+  /* Share-link box: force the code block to wrap rather than bleed */
+  .keybox{flex-wrap:wrap;align-items:stretch}
+  .keybox code{word-break:break-all;flex:1 1 100%;min-width:0;max-width:100%;overflow-wrap:anywhere}
+  /* Long table content shouldn't push viewport */
+  .table-wrap{max-width:100%;overflow-x:auto}
   /* Modal takes up the entire screen */
   .modal{width:100% !important;max-height:100vh;border-radius:0;border-left:0;border-right:0}
   .modal-f{flex-direction:column-reverse;align-items:stretch}
   .modal-f .btn{width:100%}
+  /* Exam body slimmer padding */
+  .exam-top{padding:8px 10px;flex-wrap:wrap}
+  .exam-top .meta{flex-wrap:wrap}
 }
 @media (max-width:560px){
   html{font-size:14.5px}
