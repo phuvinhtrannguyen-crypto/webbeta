@@ -660,13 +660,26 @@ function canAutofill(profile){ return isAdmin(profile) || isSubAdmin(profile); }
 async function ensureUserProfile(user){
   const ref = doc(db, "users", user.uid);
   let snap = null;
-  // Retry getDoc a few times: Firestore sometimes throws "client is offline"
-  // on the very first call right after auth, before the connection establishes.
-  for (let i = 0; i < 3; i++) {
-    try { snap = await getDoc(ref); break; }
-    catch(err){
-      if (i === 2) throw err;
-      await new Promise(r => setTimeout(r, 600 * (i + 1)));
+  // Warmup + retry loop. Firestore on restrictive networks throws "client is offline"
+  // on the first getDoc call before long-polling has completed its handshake. We
+  // nudge the connection with a tiny getDocs() probe, then retry getDoc up to 8 times.
+  for (let i = 0; i < 8; i++) {
+    try {
+      if (i > 0) {
+        try { await getDocs(query(collection(db,"users"), limit(1))); } catch(_){}
+      }
+      snap = await getDoc(ref);
+      break;
+    } catch(err){
+      if (i === 7) {
+        // Last resort: upsert-with-merge and continue so the user isn't stuck on "loading".
+        const role = user.email === ADMIN_EMAIL ? "admin" : "guest";
+        const profile = { uid:user.uid, email:user.email||"", displayName:user.displayName||(user.email?.split("@")[0]||"Người dùng"),
+          photoURL:user.photoURL||"", role, status:"active", lastLogin: serverTimestamp() };
+        await setDoc(ref, profile, { merge:true });
+        return profile;
+      }
+      await new Promise(r => setTimeout(r, 400 + 400 * i));
     }
   }
   if (!snap || !snap.exists()) {
