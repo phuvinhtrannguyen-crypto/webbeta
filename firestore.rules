@@ -152,7 +152,13 @@ service cloud.firestore {
       // (hiding answers from students entirely) requires server-side grading.
       // Write is restricted to the exam's creator / admin.
       match /private/{docId} {
-        allow read: if true;
+        // Require at least a signed-in token (including anonymous auth used
+        // by the #join flow). This doesn't make answer scraping hard for a
+        // motivated attacker — any auth account works — but it blocks
+        // zero-cost unauthenticated REST scraping and ties every read to a
+        // Firebase UID that can be audited / banned. A real fix (hiding
+        // answers from students entirely) requires server-side grading.
+        allow read: if isSignedIn();
         // isSubAdmin() mirrors the parent exam rule so a subadmin deleting
         // an exam from the admin dashboard doesn't leave the answers subdoc
         // orphaned (publicly readable with no parent exam).
@@ -214,7 +220,7 @@ service cloud.firestore {
 
     // ---------------- requests (teacher → admin) ----------------
     match /requests/{rid} {
-      allow read: if isSignedIn() && (isAdmin() || resource.data.uid == uid());
+      allow read: if isSignedIn() && (isAdmin() || isSubAdmin() || resource.data.uid == uid());
       // Disabled users cannot spam request docs either — consistent with
       // submissions/events.create gating.
       allow create: if isActive();
