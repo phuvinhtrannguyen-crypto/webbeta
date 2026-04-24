@@ -784,7 +784,7 @@ function renderAuth(){
       el("a",{href:"#",text:"Quên mật khẩu?",onclick:(e)=>{ e.preventDefault(); mode="forgot"; renderBox(); }})
     ]) : null;
     const submit = el("button",{class:"btn btn-primary btn-block btn-lg",type:"submit",text: mode==="login"?"Đăng nhập":mode==="register"?"Tạo tài khoản":"Gửi email đặt lại"});
-    form.append(fieldName, fieldEmail, passWrap, subText, submit);
+    [fieldName, fieldEmail, passWrap, subText, submit].forEach(n => { if (n) form.append(n); });
     // Social row
     const divider = el("div",{class:"divider",text:"hoặc"});
     const btnGoogle = el("button",{class:"btn btn-google btn-block btn-lg",type:"button",onclick:handleGoogle});
