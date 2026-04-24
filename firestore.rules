@@ -55,6 +55,12 @@ service cloud.firestore {
             && request.resource.data.role == 'teacher'
             && resource.data.role == 'guest'
             && 'redeemedKey' in request.resource.data
+            // Redemption may ONLY flip role + write redeemedKey. Without this
+            // hasOnly check a disabled user could redeem a valid key and
+            // simultaneously set status back to 'active' in the same write,
+            // bypassing the admin-imposed account lock (the self-edit branch
+            // catches this, but branch 4 previously did not).
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role','redeemedKey'])
             && exists(/databases/$(database)/documents/teacherKeys/$(request.resource.data.redeemedKey))
             && get(/databases/$(database)/documents/teacherKeys/$(request.resource.data.redeemedKey)).data.usedBy == uid())
       );
