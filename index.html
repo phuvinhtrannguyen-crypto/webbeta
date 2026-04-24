@@ -2406,9 +2406,24 @@ function runExam(container, ex, anon){
       const stemHtml = esc(q.stem||"").replace(/\.{6,}|_{3,}/g, `<input class="blank-input" data-q="${i}" placeholder="điền…" />`);
       const stem = el("div",{class:"stem"}); stem.innerHTML = stemHtml;
       qCard.appendChild(stem);
-      stem.querySelectorAll(".blank-input").forEach(inp => {
-        inp.addEventListener("input", () => { answers[i] = inp.value; });
-      });
+      // Keep one slot per blank so a stem with multiple blanks doesn't
+      // collapse into a single answer field (only last-typed blank kept).
+      const blanks = stem.querySelectorAll(".blank-input");
+      if (blanks.length > 1) {
+        answers[i] = Array.from(blanks).map(n => n.value || "");
+        blanks.forEach((inp, bi) => {
+          inp.addEventListener("input", () => {
+            const arr = Array.isArray(answers[i]) ? answers[i].slice() : new Array(blanks.length).fill("");
+            arr[bi] = inp.value;
+            answers[i] = arr;
+            updateProgress();
+          });
+        });
+      } else {
+        blanks.forEach(inp => {
+          inp.addEventListener("input", () => { answers[i] = inp.value; updateProgress(); });
+        });
+      }
     } else {
       const stem = el("div",{class:"stem",text:q.stem||""});
       qCard.appendChild(stem);
@@ -2633,16 +2648,33 @@ async function gradeExam(ex, answers){
     const q = ex.questions[i];
     const ua = answers[i];
     let isCorrect = false, pt = 0;
-    if (ua == null || ua === "") { grading[i] = false; continue; }
+    if (ua == null || ua === "" || (Array.isArray(ua) && ua.every(v => !v))) { grading[i] = false; continue; }
     if (q.type === "mcq") {
       const ans = typeof q.answer === "string" ? "ABCDE".indexOf(q.answer.toUpperCase()) : q.answer;
       isCorrect = Number(ua) === Number(ans);
       pt = isCorrect ? 1 : 0;
       grading[i] = isCorrect;
+    } else if (q.type === "fill" && Array.isArray(ua)) {
+      // Multi-blank fill: answers is array of user inputs, correct is array
+      // of accepted values (one per blank, in order). Score = average per-blank
+      // similarity so partial-credit flows through.
+      const correct = Array.isArray(q.answer) ? q.answer : [q.answer];
+      const n = Math.max(ua.length, correct.length);
+      let sumSim = 0, anyHit = 0;
+      for (let b=0; b<n; b++) {
+        const sim = stringSimilarity(normalize(ua[b]||""), normalize(correct[b]||""));
+        sumSim += sim;
+        if (sim >= 0.7) anyHit++;
+      }
+      const avg = n ? sumSim / n : 0;
+      pt = avg;
+      isCorrect = avg >= 0.95;
+      grading[i] = isCorrect ? true : (avg >= 0.5 ? "partial" : false);
     } else {
-      // fuzzy match
+      // Single-blank fuzzy match
       const acc = Array.isArray(q.answer) ? q.answer : [q.answer];
-      const sim = Math.max(...acc.map(a => stringSimilarity(normalize(a), normalize(ua))));
+      const uaStr = Array.isArray(ua) ? ua.join(" ") : ua;
+      const sim = Math.max(...acc.map(a => stringSimilarity(normalize(a), normalize(uaStr))));
       if (sim >= 0.95) { grading[i] = true; isCorrect=true; pt=1; }
       else if (sim >= 0.7) { grading[i] = "partial"; pt=0.5; }
       else { grading[i] = false; pt=0; }
@@ -2702,7 +2734,7 @@ function renderResult({ex, answers, grading, score, correctCount, total, violati
     const pill = r===true?'<span class="pill-score ok">Đúng</span>': r==="partial"?'<span class="pill-score mid">Một phần</span>': '<span class="pill-score bad">Sai</span>';
     row.innerHTML = `<div class="idx">Câu ${i+1} ${pill}</div>
       <div class="stem">${nl2br(q.stem||"")}</div>
-      <div class="fs-13"><b>Bạn trả lời:</b> ${esc(q.type==="mcq"? (q.options?.[ua]??"(trống)") : (ua??"(trống)"))}</div>
+      <div class="fs-13"><b>Bạn trả lời:</b> ${esc(q.type==="mcq"? (q.options?.[ua]??"(trống)") : (Array.isArray(ua) ? ua.join(" / ") : (ua??"(trống)")))}</div>
       <div class="fs-13 dim"><b>Đáp án đúng:</b> ${esc(q.type==="mcq"? (q.options?.[q.answer]??q.answer) : (Array.isArray(q.answer)?q.answer.join(" | "):q.answer))}</div>`;
     qr.appendChild(row);
   });

@@ -63,7 +63,12 @@ service cloud.firestore {
 
     // ---------------- teacherKeys ----------------
     match /teacherKeys/{code} {
-      allow read: if isSignedIn();
+      // Allow direct `get(teacherKeys/{code})` for every signed-in user so the
+      // redemption flow (redeemTeacherKey → getDoc by code) works. Disallow
+      // `list` for non-admins — otherwise any signed-in guest could enumerate
+      // unused keys via REST and self-escalate to teacher.
+      allow get: if isSignedIn();
+      allow list: if isAdmin();
       allow create, delete: if isAdmin();
       // Admin may update freely.
       allow update: if isAdmin();
