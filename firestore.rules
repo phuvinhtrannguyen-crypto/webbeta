@@ -153,9 +153,14 @@ service cloud.firestore {
       // Write is restricted to the exam's creator / admin.
       match /private/{docId} {
         allow read: if true;
+        // isSubAdmin() mirrors the parent exam rule so a subadmin deleting
+        // an exam from the admin dashboard doesn't leave the answers subdoc
+        // orphaned (publicly readable with no parent exam).
         allow create, update: if isAdmin()
+          || isSubAdmin()
           || (isTeacher() && get(/databases/$(database)/documents/exams/$(eid)).data.teacherId == uid());
         allow delete: if isAdmin()
+          || isSubAdmin()
           || (isTeacher() && get(/databases/$(database)/documents/exams/$(eid)).data.teacherId == uid());
       }
     }
