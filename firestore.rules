@@ -172,7 +172,7 @@ service cloud.firestore {
     // and (d) the basic student identity fields are strings. This does not prevent
     // score forgery on its own — for full integrity grading should move to Cloud Functions.
     match /submissions/{sid} {
-      allow read: if isSignedIn() && (resource.data.teacherId == uid() || resource.data.studentId == uid() || isAdmin());
+      allow read: if isSignedIn() && (resource.data.teacherId == uid() || resource.data.studentId == uid() || isAdmin() || isSubAdmin());
       // Require auth — even anonymous students go through Firebase Anonymous
       // Auth (signInAnonymously) when joining via #join/<examId>. Without this,
       // a bot could call the Firestore REST API to spam submissions with score:1.
@@ -191,12 +191,12 @@ service cloud.firestore {
         && request.resource.data.score is number
         && request.resource.data.score >= 0
         && request.resource.data.score <= 1;
-      allow update, delete: if (isActive() && resource.data.teacherId == uid()) || isAdmin();
+      allow update, delete: if (isActive() && resource.data.teacherId == uid()) || isAdmin() || isSubAdmin();
     }
 
     // ---------------- events (violations, logs) ----------------
     match /events/{eid} {
-      allow read: if isSignedIn() && (isAdmin() || resource.data.teacherId == uid());
+      allow read: if isSignedIn() && (isAdmin() || isSubAdmin() || resource.data.teacherId == uid());
       // Require auth, validate that the event belongs to a real exam + its
       // teacher, AND bind studentId to the caller's uid. Without the last
       // clause, a malicious signed-in student could forge violation events
