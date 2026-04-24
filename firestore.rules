@@ -117,17 +117,21 @@ service cloud.firestore {
     }
 
     // ---------------- classes ----------------
+    // Teacher-ownership branch uses isActive() so a disabled teacher cannot
+    // mass-delete or corrupt their own data via the REST API after lockout.
+    // isAdmin()/isSubAdmin() already fold status via role(), so those paths
+    // don't need extra gating.
     match /classes/{cid} {
       allow read: if isSignedIn();
       allow create: if isTeacher() && request.resource.data.teacherId == uid();
-      allow update, delete: if isSignedIn() && (resource.data.teacherId == uid() || isAdmin());
+      allow update, delete: if (isActive() && resource.data.teacherId == uid()) || isAdmin();
     }
 
     // ---------------- students (managed by teacher) ----------------
     match /students/{sid} {
       allow read: if isSignedIn();
       allow create: if isTeacher() && request.resource.data.teacherId == uid();
-      allow update, delete: if isSignedIn() && (resource.data.teacherId == uid() || isAdmin());
+      allow update, delete: if (isActive() && resource.data.teacherId == uid()) || isAdmin();
     }
 
     // ---------------- exams ----------------
@@ -138,7 +142,7 @@ service cloud.firestore {
     match /exams/{eid} {
       allow read: if true; // public read so join link works
       allow create: if isTeacher() && request.resource.data.teacherId == uid();
-      allow update, delete: if isSignedIn() && (resource.data.teacherId == uid() || isAdmin() || isSubAdmin());
+      allow update, delete: if (isActive() && resource.data.teacherId == uid()) || isAdmin() || isSubAdmin();
 
       // Correct answers (and anything else sensitive per-exam) live here.
       // Read is still permissive because client-side grading (including the
@@ -182,7 +186,7 @@ service cloud.firestore {
         && request.resource.data.score is number
         && request.resource.data.score >= 0
         && request.resource.data.score <= 1;
-      allow update, delete: if isSignedIn() && (resource.data.teacherId == uid() || isAdmin());
+      allow update, delete: if (isActive() && resource.data.teacherId == uid()) || isAdmin();
     }
 
     // ---------------- events (violations, logs) ----------------
@@ -206,7 +210,9 @@ service cloud.firestore {
     // ---------------- requests (teacher → admin) ----------------
     match /requests/{rid} {
       allow read: if isSignedIn() && (isAdmin() || resource.data.uid == uid());
-      allow create: if isSignedIn();
+      // Disabled users cannot spam request docs either — consistent with
+      // submissions/events.create gating.
+      allow create: if isActive();
       allow update: if isAdmin();
       allow delete: if isAdmin();
     }
