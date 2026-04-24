@@ -2588,8 +2588,13 @@ function renderExam(params){
 }
 
 function runExam(container, ex, anon){
-  const studentName = anon ? (state.anonStudent?.name || "Học sinh") : (state.profile?.displayName || state.user?.email || "Học sinh");
-  const studentId = anon ? "anon_"+(state.anonStudent?.code||uid(6)) : state.user.uid;
+  const studentName = anon ? (state.anonStudent?.name || state.user?.displayName || "Học sinh") : (state.profile?.displayName || state.user?.email || "Học sinh");
+  // studentId must equal the Firebase Auth uid so Firestore rules
+  // `studentId == request.auth.uid` accept the write. Previously we used
+  // "anon_<code>" for anonymous sessions, which the rule always rejected
+  // (silent failure — student saw a score but nothing was saved). Anon
+  // users signed in via signInAnonymously() so state.user.uid is populated.
+  const studentId = state.user?.uid || "";
   const answers = {};
   let violations = 0;
   let locked = false;
