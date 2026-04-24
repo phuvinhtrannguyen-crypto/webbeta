@@ -734,21 +734,30 @@ async function ensureUserProfile(user){
   }
 }
 
-/* ---------- Teacher-key redemption ---------- */
+/* ---------- Teacher-key redemption ----------
+   Split into two sequential writes (NOT a Firestore transaction). Firestore
+   security rules evaluate every write in a transaction against the PRE-
+   transaction state, so the `get(teacherKeys/...).data.usedBy == uid()`
+   check in the user-update rule always sees `null` inside a transaction and
+   denies the write. Sequential writes let rule #2 see the already-committed
+   `usedBy == uid()` set by rule #1. The small window between writes is
+   handled via an idempotent retry: if the key is already `usedBy == uid()`
+   we skip the key write and just retry the user upgrade. */
 async function redeemTeacherKey(keyCode, user){
   const keyRef = doc(db, "teacherKeys", keyCode);
   const snap = await getDoc(keyRef);
   if (!snap.exists()) throw new Error("Key không tồn tại");
   const d = snap.data();
-  if (d.usedBy) throw new Error("Key đã được sử dụng");
   if (d.expiresAt && d.expiresAt.toDate && d.expiresAt.toDate() < new Date()) throw new Error("Key đã hết hạn");
-  await runTransaction(db, async (tx)=>{
-    const s = await tx.get(keyRef);
-    const dd = s.data();
-    if (dd.usedBy) throw new Error("Key đã được sử dụng");
-    tx.update(keyRef, { usedBy: user.uid, usedAt: serverTimestamp() });
-    tx.update(doc(db,"users",user.uid), { role:"teacher", redeemedKey: keyCode });
-  });
+  if (d.usedBy && d.usedBy !== user.uid) throw new Error("Key đã được sử dụng");
+  // Step 1: mark the key as consumed by this user (idempotent — skip if
+  // already consumed by us from a previous partial retry).
+  if (d.usedBy !== user.uid) {
+    await updateDoc(keyRef, { usedBy: user.uid, usedAt: serverTimestamp() });
+  }
+  // Step 2: upgrade the user doc. Rule re-reads the key (now usedBy == uid)
+  // and allows the role change.
+  await updateDoc(doc(db,"users",user.uid), { role:"teacher", redeemedKey: keyCode });
 }
 
 /* =========================================================
