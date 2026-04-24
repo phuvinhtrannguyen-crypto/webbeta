@@ -124,14 +124,14 @@ service cloud.firestore {
     match /classes/{cid} {
       allow read: if isSignedIn();
       allow create: if isTeacher() && request.resource.data.teacherId == uid();
-      allow update, delete: if (isActive() && resource.data.teacherId == uid()) || isAdmin();
+      allow update, delete: if (isActive() && resource.data.teacherId == uid()) || isAdmin() || isSubAdmin();
     }
 
     // ---------------- students (managed by teacher) ----------------
     match /students/{sid} {
       allow read: if isSignedIn();
       allow create: if isTeacher() && request.resource.data.teacherId == uid();
-      allow update, delete: if (isActive() && resource.data.teacherId == uid()) || isAdmin();
+      allow update, delete: if (isActive() && resource.data.teacherId == uid()) || isAdmin() || isSubAdmin();
     }
 
     // ---------------- exams ----------------
