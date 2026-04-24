@@ -144,6 +144,11 @@ service cloud.firestore {
         && request.resource.data.examId is string
         && exists(/databases/$(database)/documents/exams/$(request.resource.data.examId))
         && request.resource.data.teacherId == get(/databases/$(database)/documents/exams/$(request.resource.data.examId)).data.teacherId
+        // Bind studentId to the caller's uid — mirrors the events rule.
+        // Without this, a malicious signed-in student could POST a submission
+        // with studentId="alice-uid" and an arbitrary score (0 or 1) via the
+        // Firestore REST API, framing Alice with fake results.
+        && request.resource.data.studentId == uid()
         && request.resource.data.studentName is string
         && request.resource.data.studentName.size() > 0
         && request.resource.data.studentName.size() <= 120
