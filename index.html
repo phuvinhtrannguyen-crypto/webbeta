@@ -1267,7 +1267,10 @@ function adminExams(){
           <button class="btn btn-danger btn-sm" data-act="delete">${ICONS.trash}<span>Xoá</span></button>
         </div>
       `;
-      c.querySelector('[data-act="view"]').onclick = async () => { await loadExamAnswers(ex); showExamPreview(ex); };
+      c.querySelector('[data-act="view"]').onclick = async () => {
+        try { await loadExamAnswers(ex); } catch(err) { toast.warning("Không tải được đáp án", err.message||""); }
+        showExamPreview(ex);
+      };
       c.querySelector('[data-act="approve"]').onclick = () => updateDoc(doc(db,"exams",ex.id),{status:"approved",reviewedAt:serverTimestamp()}).then(()=>toast.success("Đã duyệt đề"));
       c.querySelector('[data-act="reject"]').onclick = () => updateDoc(doc(db,"exams",ex.id),{status:"rejected",reviewedAt:serverTimestamp()}).then(()=>toast.success("Đã từ chối đề"));
       c.querySelector('[data-act="delete"]').onclick = async () => {
@@ -1642,10 +1645,14 @@ function teacherExams(){
       card.querySelector("[data-act=edit]").onclick=async()=>{
         // Pull in the private answers before opening the editor — the list
         // card only has the public (answer-stripped) questions.
-        await loadExamAnswers(ex);
+        try { await loadExamAnswers(ex); }
+        catch(err) { toast.warning("Không tải được đáp án", err.message||""); return; }
         createExamDialog(ex);
       };
-      card.querySelector("[data-act=view]").onclick=()=>showExamPreview(ex);
+      card.querySelector("[data-act=view]").onclick=async()=>{
+        try { await loadExamAnswers(ex); } catch(err) { toast.warning("Không tải được đáp án", err.message||""); }
+        showExamPreview(ex);
+      };
       card.querySelector("[data-act=subs]").onclick=()=>showExamSubs(ex);
       card.querySelector("[data-act=del]").onclick=async()=>{
         if (!await confirmDialog({title:"Xoá đề",message:"Xác nhận xoá đề này?",danger:true})) return;
@@ -1788,8 +1795,8 @@ function showExamSubs(ex){
 
 async function showSubmissionDetail(sub, ex){
   // Load private answers so the teacher sees the correct-answer key alongside
-  // the student's answer in the per-question breakdown.
-  await loadExamAnswers(ex);
+  // the student's answer in the per-question breakdown. Non-fatal on failure.
+  try { await loadExamAnswers(ex); } catch(err) { toast.warning("Không tải được đáp án", err.message||""); }
   const body = el("div",{class:"stack"});
   body.append(
     el("div",{class:"row"},[
@@ -2441,7 +2448,8 @@ function runExam(container, ex, anon){
   }
   async function autofillAll(){
     // Admin/subadmin feature — pull private answers before auto-filling.
-    await loadExamAnswers(ex);
+    try { await loadExamAnswers(ex); }
+    catch(err) { toast.error("Không tải được đáp án", err.message||""); return; }
     ex.questions.forEach((q,i) => {
       if (q.type==="mcq") {
         const idx = typeof q.answer === "number" ? q.answer : (typeof q.answer==="string"? "ABCDE".indexOf(q.answer.toUpperCase()):0);
@@ -2556,7 +2564,15 @@ function runExam(container, ex, anon){
     // Pull answers from the private subcollection just-in-time for grading.
     // The main exam doc no longer carries answer fields (prevents casual
     // answer leakage via the public exam doc's REST read).
-    await loadExamAnswers(ex);
+    try {
+      await loadExamAnswers(ex);
+    } catch(err) {
+      // Don't persist a bogus score:0 submission if we can't fetch the key.
+      console.error("loadExamAnswers failed", err);
+      toast.error("Không chấm được bài", "Không tải được đáp án. Kiểm tra mạng rồi thử lại.");
+      submitted = false;
+      return;
+    }
     // Grade
     const { score, correctCount, total, grading } = await gradeExam(ex, answers);
     // Save submission
@@ -2588,14 +2604,18 @@ async function writeExamAnswers(examId, questions){
   });
 }
 async function loadExamAnswers(ex){
-  if (!ex || !ex.id) return ex;
-  try {
-    const s = await getDoc(doc(db,"exams",ex.id,"private","answers"));
-    if (s.exists()) {
-      const arr = s.data().answers || [];
-      ex.questions = (ex.questions||[]).map((q,i) => ({ ...q, answer: arr[i] }));
-    }
-  } catch(err) { console.warn("loadExamAnswers failed", err); }
+  if (!ex || !ex.id) throw new Error("missing exam id");
+  // Fail loudly rather than silently — if grading can't fetch answers, a
+  // silent failure would score every question 0 and persist that to Firestore.
+  const s = await getDoc(doc(db,"exams",ex.id,"private","answers"));
+  if (!s.exists()) {
+    // Legacy exams (created before the answer-subcollection split) still carry
+    // `answer` inline on each question; treat missing subdoc as a no-op so
+    // grading falls back to the inline data.
+    return ex;
+  }
+  const arr = s.data().answers || [];
+  ex.questions = (ex.questions||[]).map((q,i) => ({ ...q, answer: arr[i] }));
   return ex;
 }
 function stripAnswersFromQuestions(questions){

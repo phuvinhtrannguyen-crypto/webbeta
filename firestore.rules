@@ -145,7 +145,11 @@ service cloud.firestore {
     // ---------------- events (violations, logs) ----------------
     match /events/{eid} {
       allow read: if isSignedIn() && (isAdmin() || resource.data.teacherId == uid());
-      allow create: if true; // students (even anon) can log violations
+      // Require auth — anonymous students go through signInAnonymously on
+      // the #join flow, so every legitimate event creator has a uid. Leaving
+      // this `if true` lets a bot spam forged violation events via the REST
+      // API to pollute a teacher's dashboard.
+      allow create: if isSignedIn();
       allow update, delete: if isAdmin();
     }
 
