@@ -625,7 +625,7 @@ try {
   // Force long-polling — some networks (proxies, corporate firewalls) block the
   // default WebChannel streaming and produce persistent "client is offline" errors.
   try {
-    db = initializeFirestore(app, { experimentalAutoDetectLongPolling: true });
+    db = initializeFirestore(app, { experimentalForceLongPolling: true, useFetchStreams: false });
   } catch(e) {
     db = getFirestore(app);
   }
