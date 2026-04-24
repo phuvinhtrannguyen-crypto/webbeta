@@ -672,12 +672,42 @@ async function ensureUserProfile(user){
       break;
     } catch(err){
       if (i === 7) {
-        // Last resort: upsert-with-merge and continue so the user isn't stuck on "loading".
-        const role = user.email === ADMIN_EMAIL ? "admin" : "guest";
-        const profile = { uid:user.uid, email:user.email||"", displayName:user.displayName||(user.email?.split("@")[0]||"Người dùng"),
-          photoURL:user.photoURL||"", role, status:"active", lastLogin: serverTimestamp() };
-        await setDoc(ref, profile, { merge:true });
-        return profile;
+        // SDK failed; fall back to Firestore REST API to avoid the
+        // WebChannel layer. Only WRITE if the document doesn't already exist —
+        // never clobber an existing role/status field.
+        try {
+          const token = await user.getIdToken();
+          const base = `https://firestore.googleapis.com/v1/projects/${FIREBASE_CONFIG.projectId}/databases/(default)/documents/users/${user.uid}`;
+          const getRes = await fetch(base, { headers:{"Authorization":"Bearer "+token} });
+          if (getRes.ok) {
+            const data = await getRes.json();
+            const fields = data.fields||{};
+            const decode = f => f?.stringValue ?? f?.integerValue ?? f?.booleanValue ?? (f?.timestampValue ? new Date(f.timestampValue) : undefined);
+            return {
+              uid: user.uid,
+              email: decode(fields.email)||user.email||"",
+              displayName: decode(fields.displayName)||user.displayName||"",
+              photoURL: decode(fields.photoURL)||"",
+              role: decode(fields.role) || (user.email === ADMIN_EMAIL ? "admin" : "guest"),
+              status: decode(fields.status) || "active",
+              redeemedKey: decode(fields.redeemedKey),
+              lastLogin: decode(fields.lastLogin)
+            };
+          }
+          if (getRes.status === 404) {
+            // Doc genuinely missing — create it fresh.
+            const role = user.email === ADMIN_EMAIL ? "admin" : "guest";
+            const profile = { uid:user.uid, email:user.email||"", displayName:user.displayName||(user.email?.split("@")[0]||"Người dùng"),
+              photoURL:user.photoURL||"", role, status:"active", createdAt: serverTimestamp(), lastLogin: serverTimestamp() };
+            await setDoc(ref, profile).catch(()=>{});
+            return profile;
+          }
+        } catch(_){}
+        // All paths failed — return an in-memory shadow profile so the user can
+        // at least see the auth-loading screen instead of hanging forever. DO NOT
+        // write to Firestore here — a later action will persist changes.
+        return { uid:user.uid, email:user.email||"", displayName:user.displayName||"",
+          photoURL:user.photoURL||"", role: user.email === ADMIN_EMAIL ? "admin" : "guest", status:"active" };
       }
       await new Promise(r => setTimeout(r, 400 + 400 * i));
     }
@@ -949,7 +979,7 @@ function buildShell({role="teacher", nav=[], active="", title="", children=[]}){
     ]),
     el("div",{class:"spacer"}),
     roleBadge,
-    state.profile?.role === "subadmin" ? el("span",{class:"badge is-sub",text:"SUBADMIN"}) : null
+    ...(state.profile?.role === "subadmin" ? [el("span",{class:"badge is-sub",text:"SUBADMIN"})] : [])
   );
   const main = el("main",{class:"main"});
   children.forEach(c => c && main.appendChild(c));
@@ -2159,7 +2189,7 @@ function teacherProfile(){
   if (!isTeacher(state.profile) || state.profile.role === "guest") {
     const input = el("input",{class:"input",placeholder:"Nhập key giáo viên"});
     const btn = el("button",{class:"btn btn-primary",onclick:async()=>{
-      try { await redeemTeacherKey(input.value.trim().toUpperCase(), state.user); toast.success("Đã nâng quyền giáo viên"); navigate("teacher",{tab:"profile"}); }
+      try { await redeemTeacherKey(input.value.trim().toUpperCase(), state.user); if (state.profile) state.profile.role="teacher"; toast.success("Đã nâng quyền giáo viên"); navigate("teacher",{tab:"overview"}); }
       catch(err){ toast.error("Không kích hoạt được", err.message); }
     }});
     btn.append(icon("check"),el("span",{text:"Kích hoạt"}));
