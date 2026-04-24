@@ -2458,7 +2458,14 @@ function runExam(container, ex, anon){
   container.appendChild(body);
 
   function updateProgress(){
-    const done = Object.keys(answers).filter(k=>answers[k]!=null && answers[k]!=="").length;
+    // Multi-blank fill stores answers[i] as an array of per-blank strings —
+    // treat it as answered only when at least one blank has been filled.
+    const isFilled = v => {
+      if (v == null || v === "") return false;
+      if (Array.isArray(v)) return v.some(x => x != null && x !== "");
+      return true;
+    };
+    const done = Object.keys(answers).filter(k => isFilled(answers[k])).length;
     prog.firstChild.style.width = Math.round(done/(ex.questions.length||1)*100)+"%";
   }
   async function autofillAll(){
@@ -2472,12 +2479,25 @@ function runExam(container, ex, anon){
         const card = body.querySelector(`#q-${i} .opts`);
         if (card){ card.querySelectorAll(".opt").forEach((n,j)=>n.classList.toggle("sel",j===idx)); }
       } else {
-        const v = Array.isArray(q.answer) ? q.answer[0] : (q.answer||"");
-        answers[i] = v;
         const card = body.querySelector(`#q-${i}`);
-        if (card){
-          const ta = card.querySelector("textarea"); if (ta) ta.value = v;
-          const bi = card.querySelectorAll(".blank-input"); bi.forEach(inp=>inp.value = v);
+        const bi = card ? card.querySelectorAll(".blank-input") : [];
+        if (q.type === "fill" && bi.length > 1) {
+          // Multi-blank: one answer per blank, array-shaped so grading uses
+          // the multi-blank branch. Fall back to '' when answer array is short.
+          const arr = Array.isArray(q.answer) ? q.answer : [q.answer];
+          const filled = Array.from(bi, (inp, bi2) => {
+            const val = (arr[bi2] != null ? String(arr[bi2]) : "");
+            inp.value = val;
+            return val;
+          });
+          answers[i] = filled;
+        } else {
+          const v = Array.isArray(q.answer) ? q.answer[0] : (q.answer||"");
+          answers[i] = v;
+          if (card){
+            const ta = card.querySelector("textarea"); if (ta) ta.value = v;
+            bi.forEach(inp=>inp.value = v);
+          }
         }
       }
     });
