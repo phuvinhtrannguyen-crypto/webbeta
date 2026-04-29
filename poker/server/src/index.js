@@ -3,14 +3,34 @@ import express from 'express';
 import cors from 'cors';
 import { createServer } from 'node:http';
 import { Server as IOServer } from 'socket.io';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
+import fs from 'node:fs';
 import { PokerRoom } from './game/room.js';
 
 const PORT = Number(process.env.PORT || 3001);
 const ORIGIN = process.env.CLIENT_ORIGIN || '*';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 app.use(cors({ origin: ORIGIN }));
 app.get('/healthz', (_req, res) => res.json({ ok: true }));
+
+// Optionally serve the built client bundle from the same origin so deployments
+// behind a reverse proxy (e.g. tunnels with HTTP Basic Auth) work without
+// cross-origin Socket.IO headaches.
+const clientDist = process.env.CLIENT_DIST
+  ? path.resolve(process.env.CLIENT_DIST)
+  : path.resolve(__dirname, '../../client/dist');
+if (fs.existsSync(path.join(clientDist, 'index.html'))) {
+  console.log(`[cu-bung-poker] serving client from ${clientDist}`);
+  app.use(express.static(clientDist));
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/socket.io')) return next();
+    res.sendFile(path.join(clientDist, 'index.html'));
+  });
+}
 
 const httpServer = createServer(app);
 const io = new IOServer(httpServer, {
