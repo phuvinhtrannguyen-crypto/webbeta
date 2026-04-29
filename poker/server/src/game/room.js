@@ -106,6 +106,7 @@ export class PokerRoom {
       }
     } else {
       // Waiting / finished: safe to remove fully.
+      const dealerId = this.seatOrder[this.dealerIdx];
       this.players.delete(socketId);
       this.seatOrder = this.seatOrder.filter((id) => id !== socketId);
       if (socketId === this.hostSocketId) {
@@ -115,8 +116,12 @@ export class PokerRoom {
         });
         this.hostSocketId = nextHost || null;
       }
-      // Keep dealerIdx within bounds.
-      if (this.dealerIdx >= this.seatOrder.length) this.dealerIdx = -1;
+      // Keep dealerIdx pointing at the same player by id (indices shift after
+      // filter). If the dealer was the one removed, reset to -1 so the next
+      // startHand() advances from a clean state.
+      this.dealerIdx = dealerId && dealerId !== socketId
+        ? this.seatOrder.indexOf(dealerId)
+        : -1;
     }
   }
 
@@ -519,16 +524,17 @@ export class PokerRoom {
     winner.stack += this.pot;
     winner.status = 'winner';
     this.lastWinners = [{ id: winnerId, name: winner.name, amount: this.pot, handName: null }];
+    const endedPot = this.pot;
+    this.pot = 0;
+    this.phase = 'finished';
     this.emit('hand_ended', {
       uncontested: true,
       winners: this.lastWinners,
       reveals: [],
-      pot: this.pot,
+      pot: endedPot,
       community: this.community,
       state: this.publicState(),
     });
-    this.pot = 0;
-    this.phase = 'finished';
     this.scheduleTimer(`finish:${this.id}`, () => this._returnToWaiting(), FINISHED_DURATION_MS);
   }
 
@@ -606,6 +612,9 @@ export class PokerRoom {
     this.scheduleTimer(
       `showdown:${this.id}`,
       () => {
+        const endedPot = this.pot;
+        this.pot = 0;
+        this.phase = 'finished';
         this.emit('hand_ended', {
           uncontested: false,
           winners: winnersSummary,
@@ -615,12 +624,10 @@ export class PokerRoom {
             hole: e.hole,
             handName: e.score.name,
           })),
-          pot: this.pot,
+          pot: endedPot,
           community: this.community,
           state: this.publicState(),
         });
-        this.pot = 0;
-        this.phase = 'finished';
         this.scheduleTimer(`finish:${this.id}`, () => this._returnToWaiting(), FINISHED_DURATION_MS);
       },
       revealDelay

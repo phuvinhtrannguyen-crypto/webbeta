@@ -88,8 +88,14 @@ export function useVoiceChat(players, myId) {
       source.connect(analyser);
       const data = new Uint8Array(analyser.frequencyBinCount);
       let active = false;
+      const isLocal = peerId === '__me__';
       const tick = () => {
-        if (!peersRef.current.has(peerId)) return;
+        // Stop when the peer is gone (remote) or the local mic is torn down.
+        if (isLocal) {
+          if (!localStreamRef.current) return;
+        } else if (!peersRef.current.has(peerId)) {
+          return;
+        }
         analyser.getByteFrequencyData(data);
         let sum = 0;
         for (const v of data) sum += v;
@@ -97,7 +103,10 @@ export function useVoiceChat(players, myId) {
         const isActive = avg > 12;
         if (isActive !== active) {
           active = isActive;
-          socket.emit('speaking', { speaking: isActive });
+          // Only the local mic's detector reports OUR own speaking state
+          // to the server. Remote peers' own clients are responsible for
+          // reporting their own speaking.
+          if (isLocal) socket.emit('speaking', { speaking: isActive });
         }
         speakingTimersRef.current.set(peerId, requestAnimationFrame(tick));
       };

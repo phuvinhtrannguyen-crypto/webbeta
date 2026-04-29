@@ -110,6 +110,36 @@ test('_fastForwardToShowdown during river_intro deals missing river card', () =>
   assert.equal(room.phase, 'showdown');
 });
 
+test('hand_ended event sees phase=finished for uncontested win', () => {
+  const { room, events } = makeRoom();
+  room.addPlayer('a', 'A');
+  room.addPlayer('b', 'B');
+  room.startHand('a');
+  // Fold everyone but A to force uncontested end.
+  room.players.get('b').status = 'folded';
+  events.length = 0;
+  room._endHandUncontested('a');
+  const ended = events.find((e) => e.event === 'hand_ended');
+  assert.ok(ended, 'hand_ended emitted');
+  assert.equal(ended.payload.state.phase, 'finished', 'phase is finished in hand_ended payload');
+  assert.equal(room.phase, 'finished');
+});
+
+test('waiting-phase removePlayer preserves dealer button by id', () => {
+  const { room } = makeRoom();
+  room.addPlayer('a', 'A');
+  room.addPlayer('b', 'B');
+  room.addPlayer('c', 'C');
+  room.addPlayer('d', 'D');
+  room.dealerIdx = 2; // dealer is 'c'
+  // Remove 'a' (before dealer). dealer should still be 'c'.
+  room.removePlayer('a');
+  assert.equal(room.seatOrder[room.dealerIdx], 'c');
+  // Remove the dealer itself -> dealerIdx resets.
+  room.removePlayer('c');
+  assert.equal(room.dealerIdx, -1);
+});
+
 test('_returnToWaiting cleans up disconnected players', () => {
   const { room } = makeRoom();
   room.addPlayer('a', 'A');
