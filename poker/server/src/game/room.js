@@ -26,12 +26,13 @@ const SMALL_BLIND = 5;
 const BIG_BLIND = 10;
 
 export class PokerRoom {
-  constructor({ id, hostSocketId, emit, clearTimer, scheduleTimer }) {
+  constructor({ id, hostSocketId, emit, clearTimer, scheduleTimer, onEmpty }) {
     this.id = id;
     this.hostSocketId = hostSocketId;
     this.emit = emit;
     this.scheduleTimer = scheduleTimer; // (key, fn, ms) => void
     this.clearTimer = clearTimer; // (key) => void
+    this.onEmpty = onEmpty || null; // callback when room becomes empty
 
     /** @type {Map<string, Player>} */
     this.players = new Map(); // socketId -> player
@@ -478,6 +479,9 @@ export class PokerRoom {
   }
 
   _fastForwardToShowdown() {
+    // Stop any pending betting-round timer so a late auto-action can't
+    // re-enter this function during river_intro.
+    this.clearTimer(`action:${this.id}`);
     // Deal remaining community cards quickly but still trigger river_intro if river not yet dealt.
     if (this.phase === 'preflop') {
       this._dealCommunity(3);
@@ -595,7 +599,8 @@ export class PokerRoom {
 
     // Apply awards + set statuses.
     for (const p of this.players.values()) {
-      p.status = p.status === 'folded' ? 'loser' : 'loser';
+      // Preserve 'waiting' for spectators who sat out (e.g. zero-stack).
+      if (p.status !== 'waiting') p.status = 'loser';
     }
     for (const [id, amt] of Object.entries(awards)) {
       const p = this.players.get(id);
@@ -664,6 +669,12 @@ export class PokerRoom {
     }
 
     this.emit('state_sync', this.publicState());
+
+    // If the purge emptied the room entirely (everyone disconnected during
+    // the hand), notify the owner so the room can be dropped from memory.
+    if (this.players.size === 0 && typeof this.onEmpty === 'function') {
+      this.onEmpty();
+    }
   }
 
   maybeAdvanceAfterPlayerGone() {

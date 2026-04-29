@@ -62,6 +62,9 @@ function makeRoom(hostSocketId) {
     emit: (event, payload) => dispatch(id, event, payload),
     scheduleTimer,
     clearTimer: clearTimerKey,
+    onEmpty: () => {
+      rooms.delete(id);
+    },
   });
   rooms.set(id, room);
   return room;
@@ -82,8 +85,33 @@ function sendStateSync(room) {
 }
 
 // ----- socket handlers -----
+// Wrap every listener in a try/catch that also null-coalesces the payload,
+// so a client sending `null`/`undefined` (or anything non-object) can never
+// crash the server via destructuring.
+function safeOn(socket, event, handler) {
+  socket.on(event, (...args) => {
+    // Normalize the first arg: many handlers destructure `{ … }` out of it.
+    if (args.length > 0 && (args[0] === null || args[0] === undefined)) {
+      args[0] = {};
+    }
+    try {
+      handler(...args);
+    } catch (e) {
+      console.error(`[${event}] handler error`, e);
+      // Try to send an error ack if the last arg is a callback.
+      const maybeCb = args[args.length - 1];
+      if (typeof maybeCb === 'function') {
+        try {
+          maybeCb({ ok: false, error: e.message || 'internal error' });
+        } catch {}
+      }
+    }
+  });
+}
+
 io.on('connection', (socket) => {
-  socket.on('create_room', ({ name }, cb) => {
+  safeOn(socket, 'create_room', (payload, cb) => {
+    const { name } = payload || {};
     try {
       const room = makeRoom(socket.id);
       room.addPlayer(socket.id, name);
@@ -96,7 +124,8 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('join_room', ({ roomId, name }, cb) => {
+  safeOn(socket, 'join_room', (payload, cb) => {
+    const { roomId, name } = payload || {};
     try {
       const room = rooms.get((roomId || '').toUpperCase());
       if (!room) throw new Error('Room not found');
@@ -110,7 +139,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('start_hand', (_payload, cb) => {
+  safeOn(socket, 'start_hand', (_payload, cb) => {
     const roomId = socketToRoom.get(socket.id);
     const room = rooms.get(roomId);
     if (!room) return cb?.({ ok: false, error: 'No room' });
@@ -122,7 +151,8 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('player_action', ({ action, amount }, cb) => {
+  safeOn(socket, 'player_action', (payload, cb) => {
+    const { action, amount } = payload || {};
     const roomId = socketToRoom.get(socket.id);
     const room = rooms.get(roomId);
     if (!room) return cb?.({ ok: false, error: 'No room' });
@@ -134,7 +164,8 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('chat_message', ({ text }) => {
+  safeOn(socket, 'chat_message', (payload) => {
+    const { text } = payload || {};
     const roomId = socketToRoom.get(socket.id);
     const room = rooms.get(roomId);
     if (!room) return;
@@ -142,7 +173,8 @@ io.on('connection', (socket) => {
     if (msg) io.to(room.id).emit('chat_message', msg);
   });
 
-  socket.on('mic_toggle', ({ on }) => {
+  safeOn(socket, 'mic_toggle', (payload) => {
+    const { on } = payload || {};
     const roomId = socketToRoom.get(socket.id);
     const room = rooms.get(roomId);
     if (!room) return;
@@ -151,25 +183,27 @@ io.on('connection', (socket) => {
     sendStateSync(room);
   });
 
-  socket.on('speaking', ({ speaking }) => {
+  safeOn(socket, 'speaking', (payload) => {
+    const { speaking } = payload || {};
     const roomId = socketToRoom.get(socket.id);
     if (!roomId) return;
     socket.to(roomId).emit('speaking', { id: socket.id, speaking: !!speaking });
   });
 
   // ---- WebRTC signaling (mesh) ----
-  socket.on('webrtc_signal', ({ to, data }) => {
+  safeOn(socket, 'webrtc_signal', (payload) => {
+    const { to, data } = payload || {};
     if (!to || !data) return;
     io.to(to).emit('webrtc_signal', { from: socket.id, data });
   });
 
-  socket.on('webrtc_hello', () => {
+  safeOn(socket, 'webrtc_hello', () => {
     const roomId = socketToRoom.get(socket.id);
     if (!roomId) return;
     socket.to(roomId).emit('webrtc_hello', { from: socket.id });
   });
 
-  socket.on('disconnect', () => {
+  safeOn(socket, 'disconnect', () => {
     const roomId = socketToRoom.get(socket.id);
     socketToRoom.delete(socket.id);
     if (!roomId) return;
@@ -177,11 +211,18 @@ io.on('connection', (socket) => {
     if (!room) return;
     room.removePlayer(socket.id);
     io.to(room.id).emit('player_left', { id: socket.id, state: room.publicState() });
+    // Fast path: waiting/finished phase — removePlayer actually deleted
+    // them, so the Map size is authoritative.
     if (room.players.size === 0) {
       rooms.delete(room.id);
     } else {
       sendStateSync(room);
     }
+    // Slow path: during an active hand, removePlayer keeps disconnected
+    // players in the Map so their contribution is preserved for side pots.
+    // In that case PokerRoom._returnToWaiting() will purge disconnected
+    // players and invoke the onEmpty() callback passed in makeRoom(), which
+    // cleans up the room from the `rooms` Map.
   });
 });
 
