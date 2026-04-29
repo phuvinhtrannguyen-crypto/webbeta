@@ -75,18 +75,48 @@ export class PokerRoom {
   removePlayer(socketId) {
     const p = this.players.get(socketId);
     if (!p) return;
-    // If hand in progress, mark folded so pot logic still works.
-    if (this.phase !== 'waiting' && this.phase !== 'finished' && p.status === 'playing') {
-      p.status = 'folded';
-    }
-    this.players.delete(socketId);
-    this.seatOrder = this.seatOrder.filter((id) => id !== socketId);
-    if (socketId === this.hostSocketId) {
-      this.hostSocketId = this.seatOrder[0] || null;
-    }
-    // If acting player left, advance
-    if (this.phase !== 'waiting' && this.phase !== 'finished' && this.phase !== 'showdown') {
-      this.maybeAdvanceAfterPlayerGone();
+
+    const handActive =
+      this.phase !== 'waiting' && this.phase !== 'finished';
+
+    if (handActive) {
+      // Hand in progress: KEEP the player in this.players and seatOrder so that
+      // totalContributed is preserved for side pot calculation in _showdown().
+      // Also keeps seatOrder indices (incl. actingIdx, dealerIdx) stable.
+      // They'll be cleaned up in _returnToWaiting().
+      p.connected = false;
+      if (p.status === 'playing') p.status = 'folded';
+      // All-in players stay 'allin' so buildPots still treats their contribution
+      // as eligible for the side pot they paid into.
+
+      // Transfer host if needed to the next connected player.
+      if (socketId === this.hostSocketId) {
+        const nextHost = this.seatOrder.find((id) => {
+          const other = this.players.get(id);
+          return other && other.connected && id !== socketId;
+        });
+        this.hostSocketId = nextHost || null;
+      }
+
+      // If it was this player's turn, advance. But don't interfere with the
+      // staggered showdown reveal or the river intro animation — those own
+      // their own timers and will complete naturally.
+      if (this.phase !== 'showdown' && this.phase !== 'river_intro') {
+        this.maybeAdvanceAfterPlayerGone();
+      }
+    } else {
+      // Waiting / finished: safe to remove fully.
+      this.players.delete(socketId);
+      this.seatOrder = this.seatOrder.filter((id) => id !== socketId);
+      if (socketId === this.hostSocketId) {
+        const nextHost = this.seatOrder.find((id) => {
+          const other = this.players.get(id);
+          return other && other.connected;
+        });
+        this.hostSocketId = nextHost || null;
+      }
+      // Keep dealerIdx within bounds.
+      if (this.dealerIdx >= this.seatOrder.length) this.dealerIdx = -1;
     }
   }
 
@@ -469,11 +499,22 @@ export class PokerRoom {
       );
       return;
     }
+    if (this.phase === 'river_intro') {
+      // Already in intro — cancel pending river timer and deal the river ourselves
+      // to avoid running showdown with only 4 community cards.
+      this.clearTimer(`river:${this.id}`);
+      if (this.community.length < 5) this._dealCommunity(5 - this.community.length);
+      this.phase = 'river';
+      this.emit('community_dealt', { cards: this.community, phase: this.phase });
+      this._showdown();
+      return;
+    }
     this._showdown();
   }
 
   _endHandUncontested(winnerId) {
     this.clearTimer(`action:${this.id}`);
+    this.clearTimer(`river:${this.id}`);
     const winner = this.players.get(winnerId);
     winner.stack += this.pot;
     winner.status = 'winner';
@@ -493,6 +534,7 @@ export class PokerRoom {
 
   _showdown() {
     this.clearTimer(`action:${this.id}`);
+    this.clearTimer(`river:${this.id}`);
     this.phase = 'showdown';
     const contestants = [...this.players.values()].filter(
       (p) => p.status === 'playing' || p.status === 'allin'
@@ -594,14 +636,34 @@ export class PokerRoom {
       p.currentBet = 0;
       p.totalContributed = 0;
       p.hasActedThisRound = false;
-      if (p.stack <= 0) p.status = 'waiting';
-      else p.status = 'waiting';
+      p.status = 'waiting';
     }
     this.community = [];
+
+    // Clean up players who disconnected during the hand (kept around for side pots).
+    const dealerId = this.seatOrder[this.dealerIdx];
+    for (const [id, p] of [...this.players.entries()]) {
+      if (!p.connected) {
+        this.players.delete(id);
+      }
+    }
+    this.seatOrder = this.seatOrder.filter((id) => this.players.has(id));
+    // Restore dealerIdx pointing at the same player (if still present) else reset.
+    const newDealerIdx = dealerId ? this.seatOrder.indexOf(dealerId) : -1;
+    this.dealerIdx = newDealerIdx;
+    // Re-assign host if current host disconnected.
+    if (!this.hostSocketId || !this.players.has(this.hostSocketId)) {
+      this.hostSocketId = this.seatOrder[0] || null;
+    }
+
     this.emit('state_sync', this.publicState());
   }
 
   maybeAdvanceAfterPlayerGone() {
+    // NOTE: we intentionally keep disconnected players in seatOrder during an
+    // active hand (see removePlayer), so seatOrder indices — including
+    // actingIdx and dealerIdx — remain valid. The disconnected seat is now
+    // marked folded/allin, so _advanceAfterAction → _nextActor will skip it.
     if (this.actingIdx >= this.seatOrder.length) this.actingIdx = 0;
     this._advanceAfterAction();
   }
