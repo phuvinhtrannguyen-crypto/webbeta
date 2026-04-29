@@ -153,6 +153,13 @@ export class PokerRoom {
     if (this.phase !== 'waiting' && this.phase !== 'finished') {
       throw new Error('Hand already in progress');
     }
+    // Clear stale timers from the previous hand's end-of-round sequence so a
+    // host who starts a new hand during the 8s 'finished' window doesn't get
+    // their hand torn down by the pending _returnToWaiting() callback.
+    this.clearTimer(`finish:${this.id}`);
+    this.clearTimer(`showdown:${this.id}`);
+    this.clearTimer(`river:${this.id}`);
+    this.clearTimer(`action:${this.id}`);
     // Remove broke players' capability: those with 0 stack sit out.
     const activeIds = this.seatOrder.filter((id) => {
       const p = this.players.get(id);

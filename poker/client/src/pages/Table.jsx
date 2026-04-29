@@ -44,6 +44,11 @@ export default function Table({ room, setRoom, onLeave, me }) {
       setWinnerInfo(null);
       setShowdownReveals([]);
       setRevealedIds(new Set());
+      // Clear last hand's hole cards. Active players get their new hole via
+      // a subsequent 'your_hole' event; sitting-out players (zero stack)
+      // don't receive one, so clearing here prevents their previous hand's
+      // cards from remaining visible face-up.
+      setHole([]);
       setRoom((r) => (r ? { ...r, state: p } : r));
     };
     const onAction = (p) => {

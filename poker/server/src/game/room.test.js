@@ -126,6 +126,23 @@ test('hand_ended event sees phase=finished for uncontested win', () => {
   assert.equal(room.phase, 'finished');
 });
 
+test('startHand clears stale finish/showdown/river timers', () => {
+  const { room, scheduled } = makeRoom();
+  room.addPlayer('a', 'A');
+  room.addPlayer('b', 'B');
+  // Simulate a prior hand's end: we're in 'finished' with a pending finish timer.
+  room.phase = 'finished';
+  scheduled.set(`finish:${room.id}`, () => {});
+  scheduled.set(`showdown:${room.id}`, () => {});
+  scheduled.set(`river:${room.id}`, () => {});
+  room.startHand('a');
+  assert.equal(scheduled.has(`finish:${room.id}`), false, 'finish timer cleared');
+  assert.equal(scheduled.has(`showdown:${room.id}`), false, 'showdown timer cleared');
+  assert.equal(scheduled.has(`river:${room.id}`), false, 'river timer cleared');
+  // New hand's action timer is now armed.
+  assert.ok(scheduled.has(`action:${room.id}`));
+});
+
 test('_fastForwardToShowdown clears pending action timer', () => {
   const { room, scheduled } = makeRoom();
   room.addPlayer('a', 'A');
