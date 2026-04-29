@@ -143,6 +143,28 @@ test('startHand clears stale finish/showdown/river timers', () => {
   assert.ok(scheduled.has(`action:${room.id}`));
 });
 
+test('startHand during finished window purges disconnected players', () => {
+  const { room } = makeRoom();
+  room.addPlayer('a', 'A');
+  room.addPlayer('b', 'B');
+  room.addPlayer('c', 'C');
+  room.startHand('a');
+  // B disconnects mid-hand.
+  room.removePlayer('b');
+  assert.equal(room.players.has('b'), true, 'B kept for side-pot integrity');
+  assert.equal(room.players.get('b').connected, false);
+  // Simulate end-of-hand: we're now in 'finished' with B still in players map.
+  room.phase = 'finished';
+  // Host starts a new hand immediately (inside the 8s finished window).
+  room.startHand('a');
+  // B must NOT be dealt into the new hand — their disconnected state carries over.
+  assert.equal(room.players.has('b'), false, 'disconnected B purged before new hand');
+  assert.equal(room.seatOrder.includes('b'), false);
+  // A and C get dealt.
+  assert.equal(room.players.get('a').hole.length, 2);
+  assert.equal(room.players.get('c').hole.length, 2);
+});
+
 test('_fastForwardToShowdown clears pending action timer', () => {
   const { room, scheduled } = makeRoom();
   room.addPlayer('a', 'A');

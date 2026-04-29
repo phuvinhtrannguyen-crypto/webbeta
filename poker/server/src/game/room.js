@@ -160,6 +160,24 @@ export class PokerRoom {
     this.clearTimer(`showdown:${this.id}`);
     this.clearTimer(`river:${this.id}`);
     this.clearTimer(`action:${this.id}`);
+
+    // Purge players who disconnected during the previous hand. Normally
+    // _returnToWaiting() would do this, but if the host starts a new hand
+    // during the 'finished' window we cancelled that callback above — so we
+    // run the same cleanup here, preserving dealerIdx by id.
+    const prevDealerId = this.seatOrder[this.dealerIdx];
+    for (const [id, p] of [...this.players.entries()]) {
+      if (!p.connected) this.players.delete(id);
+    }
+    this.seatOrder = this.seatOrder.filter((id) => this.players.has(id));
+    this.dealerIdx = prevDealerId && this.players.has(prevDealerId)
+      ? this.seatOrder.indexOf(prevDealerId)
+      : -1;
+    if (this.hostSocketId && !this.players.has(this.hostSocketId)) {
+      this.hostSocketId = this.seatOrder[0] || null;
+    }
+    if (this.players.size < 2) throw new Error('Need at least 2 players');
+
     // Remove broke players' capability: those with 0 stack sit out.
     const activeIds = this.seatOrder.filter((id) => {
       const p = this.players.get(id);
