@@ -122,7 +122,7 @@ export class PokerRoom {
       // staggered showdown reveal or the river intro animation — those own
       // their own timers and will complete naturally.
       if (this.phase !== 'showdown' && this.phase !== 'river_intro') {
-        this.maybeAdvanceAfterPlayerGone();
+        this.maybeAdvanceAfterPlayerGone(socketId);
       }
     } else {
       // Waiting / finished: safe to remove fully.
@@ -647,8 +647,9 @@ export class PokerRoom {
 
     // Apply awards + set statuses.
     for (const p of this.players.values()) {
-      // Preserve 'waiting' for spectators who sat out (e.g. zero-stack).
-      if (p.status !== 'waiting') p.status = 'loser';
+      // Preserve 'waiting' for spectators who sat out (e.g. zero-stack) and
+      // 'queued' for players who joined mid-hand and never participated.
+      if (p.status !== 'waiting' && p.status !== 'queued') p.status = 'loser';
     }
     for (const [id, amt] of Object.entries(awards)) {
       const p = this.players.get(id);
@@ -745,12 +746,35 @@ export class PokerRoom {
     }
   }
 
-  maybeAdvanceAfterPlayerGone() {
+  maybeAdvanceAfterPlayerGone(disconnectedId) {
     // NOTE: we intentionally keep disconnected players in seatOrder during an
     // active hand (see removePlayer), so seatOrder indices — including
     // actingIdx and dealerIdx — remain valid. The disconnected seat is now
     // marked folded/allin, so _advanceAfterAction → _nextActor will skip it.
     if (this.actingIdx >= this.seatOrder.length) this.actingIdx = 0;
+
+    // If a NON-acting player disconnected, the current actor is mid-decision
+    // and shouldn't have their turn skipped by _nextActor. Only check for
+    // game-ending early-exit conditions (everyone folded, or everyone all-in)
+    // and let the action timer keep running for the current actor.
+    const actingId = this.seatOrder[this.actingIdx];
+    if (disconnectedId && disconnectedId !== actingId) {
+      const active = [...this.players.values()].filter(
+        (p) => p.status === 'playing' || p.status === 'allin',
+      );
+      if (active.length === 1) {
+        this._endHandUncontested(active[0].id);
+        return;
+      }
+      const stillToAct = active.filter((p) => p.status === 'playing');
+      if (stillToAct.length <= 1 && this._everyoneMatched()) {
+        this._fastForwardToShowdown();
+        return;
+      }
+      // Otherwise, let the current actor keep their turn untouched.
+      return;
+    }
+
     this._advanceAfterAction();
   }
 
