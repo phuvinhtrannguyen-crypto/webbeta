@@ -5,8 +5,10 @@ import {
   unregisterExternalMediaElement,
 } from '../media/casinoMedia.js';
 
-const ALL_IN_VIDEO_SRC = '/fx/all-in-left.mp4';
-const END_VIDEO_SRC = '/fx/this-is-the-end.mp4';
+// Uploaded files in public/fx. The 169f video is the end cinematic;
+// the other uploaded mp4 is the all-in-left cinematic.
+const ALL_IN_VIDEO_SRC = '/fx/63890366aeeb6e2cecb8407d4c3046ec.mp4';
+const END_VIDEO_SRC = '/fx/169f3da9234ddc76059714adb70c9111.mp4';
 
 export default function CinematicEvents() {
   const [allInFx, setAllInFx] = useState(null);
