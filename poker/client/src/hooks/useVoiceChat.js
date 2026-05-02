@@ -6,36 +6,46 @@ import {
   unregisterPeerAudioEl,
 } from '../audio/engine.js';
 
-// Mesh-WebRTC voice chat. Each peer pair has a single RTCPeerConnection.
-//
-// Flow when mic is toggled on:
-//   1. getUserMedia → localStreamRef
-//   2. Add tracks to every existing peer connection.
-//   3. negotiationneeded fires → we (the polite/initiator side) generate a
-//      fresh offer that includes the audio mline; remote peer answers.
-// Without renegotiation a connection that opened *before* the mic was on has
-// no audio mline, so even after addTrack the remote never hears anything.
-//
-// Initiator rule (deterministic): the peer with the lexicographically smaller
-// socket id is the initiator (createOffer). This avoids glare.
+const ICE_SERVERS = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' },
+  { urls: 'stun:stun2.l.google.com:19302' },
+];
+
+function unlockRemoteAudio() {
+  try {
+    ensureContext();
+  } catch {}
+  document.querySelectorAll('audio[data-peer-audio="1"]').forEach((el) => {
+    try {
+      el.muted = false;
+      el.volume = el.volume || 1;
+      el.play().catch(() => {});
+    } catch {}
+  });
+}
+
+if (typeof window !== 'undefined') {
+  ['click', 'touchstart', 'pointerdown', 'keydown'].forEach((ev) => {
+    window.addEventListener(ev, unlockRemoteAudio, { passive: true, capture: true });
+  });
+}
+
 export function useVoiceChat(players, myId) {
   const [enabled, setEnabled] = useState(false);
   const localStreamRef = useRef(null);
-  const peersRef = useRef(new Map()); // peerId -> RTCPeerConnection
+  const peersRef = useRef(new Map());
   const audioElsRef = useRef(new Map());
   const speakingTimersRef = useRef(new Map());
   const myIdRef = useRef(myId);
   myIdRef.current = myId;
 
-  const shouldInitiateTo = (otherId) =>
-    myIdRef.current && otherId && myIdRef.current < otherId;
+  const shouldInitiateTo = (otherId) => myIdRef.current && otherId && myIdRef.current < otherId;
 
   const closePeer = (peerId) => {
     const pc = peersRef.current.get(peerId);
     if (pc) {
-      try {
-        pc.close();
-      } catch {}
+      try { pc.close(); } catch {}
       peersRef.current.delete(peerId);
     }
     const el = audioElsRef.current.get(peerId);
@@ -50,17 +60,54 @@ export function useVoiceChat(players, myId) {
     speakingTimersRef.current.delete(peerId);
   };
 
+  const attachRemoteAudio = (peerId, stream) => {
+    let el = audioElsRef.current.get(peerId);
+    if (!el) {
+      el = document.createElement('audio');
+      el.dataset.peerAudio = '1';
+      el.autoplay = true;
+      el.playsInline = true;
+      el.muted = false;
+      el.volume = 1;
+      el.style.position = 'fixed';
+      el.style.width = '1px';
+      el.style.height = '1px';
+      el.style.left = '-9999px';
+      document.body.appendChild(el);
+      audioElsRef.current.set(peerId, el);
+      registerPeerAudioEl(peerId, el);
+    }
+    if (el.srcObject !== stream) el.srcObject = stream;
+    const tryPlay = () => {
+      el.muted = false;
+      const p = el.play();
+      if (p?.catch) p.catch(() => {});
+    };
+    tryPlay();
+    setTimeout(tryPlay, 250);
+    setTimeout(tryPlay, 1000);
+  };
+
+  const addLocalTrackToPeer = async (pc, stream) => {
+    const track = stream?.getAudioTracks?.()[0];
+    if (!track) return;
+    const sender = pc.getSenders().find((s) => s.track?.kind === 'audio') || pc.getSenders().find((s) => !s.track);
+    if (sender) {
+      try {
+        await sender.replaceTrack(track);
+        return;
+      } catch {}
+    }
+    try { pc.addTrack(track, stream); } catch {}
+  };
+
   const renegotiate = async (peerId) => {
     const pc = peersRef.current.get(peerId);
-    if (!pc) return;
-    if (!shouldInitiateTo(peerId)) return; // only initiator pushes offers
+    if (!pc || !shouldInitiateTo(peerId) || pc.signalingState !== 'stable') return;
     try {
-      const offer = await pc.createOffer();
+      const offer = await pc.createOffer({ offerToReceiveAudio: true });
       await pc.setLocalDescription(offer);
-      socket.emit('webrtc_signal', {
-        to: peerId,
-        data: { sdp: pc.localDescription },
-      });
+      socket.emit('webrtc_signal', { to: peerId, data: { sdp: pc.localDescription } });
     } catch (e) {
       console.warn('[voice] renegotiate error', e);
     }
@@ -68,76 +115,35 @@ export function useVoiceChat(players, myId) {
 
   const createPeer = (peerId) => {
     if (peersRef.current.has(peerId)) return peersRef.current.get(peerId);
-    const pc = new RTCPeerConnection({
-      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
-    });
+    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
     peersRef.current.set(peerId, pc);
 
-    // Always allocate a transceiver for audio so the SDP has an audio mline
-    // even before getUserMedia returns. This avoids "no media" answers.
     try {
       pc.addTransceiver('audio', { direction: 'sendrecv' });
     } catch {}
 
-    if (localStreamRef.current) {
-      for (const track of localStreamRef.current.getTracks()) {
-        try {
-          pc.addTrack(track, localStreamRef.current);
-        } catch (e) {
-          console.warn('[voice] addTrack', e);
-        }
-      }
-    }
+    if (localStreamRef.current) addLocalTrackToPeer(pc, localStreamRef.current);
 
     pc.onicecandidate = (ev) => {
-      if (ev.candidate) {
-        socket.emit('webrtc_signal', {
-          to: peerId,
-          data: { candidate: ev.candidate },
-        });
-      }
+      if (ev.candidate) socket.emit('webrtc_signal', { to: peerId, data: { candidate: ev.candidate } });
     };
 
     pc.ontrack = (ev) => {
-      const stream = ev.streams[0] || new MediaStream([ev.track]);
-      let el = audioElsRef.current.get(peerId);
-      if (!el) {
-        el = document.createElement('audio');
-        el.autoplay = true;
-        el.playsInline = true;
-        // Note: we DO NOT mute by default — the audio engine controls volume.
-        document.body.appendChild(el);
-        audioElsRef.current.set(peerId, el);
-        registerPeerAudioEl(peerId, el);
-      }
-      el.srcObject = stream;
-      const tryPlay = () => {
-        const p = el.play();
-        if (p && p.catch) p.catch(() => {});
-      };
-      tryPlay();
+      const stream = ev.streams?.[0] || new MediaStream([ev.track]);
+      attachRemoteAudio(peerId, stream);
       attachSpeakingDetection(peerId, stream);
     };
 
-    pc.onnegotiationneeded = async () => {
-      // Only the initiator side should push offers (avoid glare).
-      if (!shouldInitiateTo(peerId)) return;
-      try {
-        const offer = await pc.createOffer();
-        if (pc.signalingState !== 'stable') return;
-        await pc.setLocalDescription(offer);
-        socket.emit('webrtc_signal', {
-          to: peerId,
-          data: { sdp: pc.localDescription },
-        });
-      } catch (e) {
-        console.warn('[voice] negotiationneeded', e);
-      }
-    };
-
+    pc.onnegotiationneeded = () => renegotiate(peerId);
     pc.onconnectionstatechange = () => {
-      if (['failed', 'closed', 'disconnected'].includes(pc.connectionState)) {
-        closePeer(peerId);
+      if (['failed', 'closed'].includes(pc.connectionState)) closePeer(peerId);
+      if (pc.connectionState === 'connected') unlockRemoteAudio();
+    };
+    pc.oniceconnectionstatechange = () => {
+      if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') unlockRemoteAudio();
+      if (pc.iceConnectionState === 'failed') {
+        try { pc.restartIce(); } catch {}
+        renegotiate(peerId);
       }
     };
 
@@ -152,23 +158,17 @@ export function useVoiceChat(players, myId) {
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 512;
       source.connect(analyser);
-      // NOTE: do NOT connect analyser to destination — that would cause
-      // local feedback for our own mic stream. The remote peer's <audio>
-      // element handles the actual playback.
       const data = new Uint8Array(analyser.frequencyBinCount);
       let active = false;
       const isLocal = peerId === '__me__';
       const tick = () => {
         if (isLocal) {
           if (!localStreamRef.current) return;
-        } else if (!peersRef.current.has(peerId)) {
-          return;
-        }
+        } else if (!peersRef.current.has(peerId)) return;
         analyser.getByteFrequencyData(data);
         let sum = 0;
         for (const v of data) sum += v;
-        const avg = sum / data.length;
-        const isActive = avg > 12;
+        const isActive = sum / data.length > 10;
         if (isActive !== active) {
           active = isActive;
           if (isLocal) socket.emit('speaking', { speaking: isActive });
@@ -176,24 +176,17 @@ export function useVoiceChat(players, myId) {
         speakingTimersRef.current.set(peerId, requestAnimationFrame(tick));
       };
       tick();
-    } catch {
-      // ignore
-    }
+    } catch {}
   };
 
-  // Start / stop local mic based on `enabled`.
   useEffect(() => {
     let cancelled = false;
     async function run() {
       if (enabled) {
         try {
-          ensureContext(); // unlock audio for SFX/playback
+          unlockRemoteAudio();
           const stream = await navigator.mediaDevices.getUserMedia({
-            audio: {
-              echoCancellation: true,
-              noiseSuppression: true,
-              autoGainControl: true,
-            },
+            audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
             video: false,
           });
           if (cancelled) {
@@ -201,28 +194,8 @@ export function useVoiceChat(players, myId) {
             return;
           }
           localStreamRef.current = stream;
-          // Add tracks to every existing peer; negotiationneeded will refire.
           for (const [peerId, pc] of peersRef.current) {
-            for (const track of stream.getTracks()) {
-              const exists = pc.getSenders().find((s) => s.track === track);
-              if (!exists) {
-                // Prefer replaceTrack onto the pre-allocated audio sender
-                // so we don't add a second mline.
-                const audioSender = pc.getSenders().find(
-                  (s) => s.track && s.track.kind === 'audio',
-                ) || pc.getSenders().find((s) => !s.track);
-                if (audioSender && !audioSender.track) {
-                  try {
-                    await audioSender.replaceTrack(track);
-                  } catch {
-                    pc.addTrack(track, stream);
-                  }
-                } else {
-                  pc.addTrack(track, stream);
-                }
-              }
-            }
-            // Force a fresh offer so the answer side picks up the new track.
+            await addLocalTrackToPeer(pc, stream);
             renegotiate(peerId);
           }
           attachSpeakingDetection('__me__', stream);
@@ -235,13 +208,10 @@ export function useVoiceChat(players, myId) {
         if (localStreamRef.current) {
           localStreamRef.current.getTracks().forEach((t) => t.stop());
           localStreamRef.current = null;
-          // Replace senders with null so the remote stops receiving audio.
           for (const [peerId, pc] of peersRef.current) {
             for (const sender of pc.getSenders()) {
-              if (sender.track && sender.track.kind === 'audio') {
-                try {
-                  await sender.replaceTrack(null);
-                } catch {}
+              if (sender.track?.kind === 'audio') {
+                try { await sender.replaceTrack(null); } catch {}
               }
             }
             renegotiate(peerId);
@@ -251,68 +221,46 @@ export function useVoiceChat(players, myId) {
       }
     }
     run();
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => { cancelled = true; };
   }, [enabled]);
 
-  // Open / close peer connections as the room roster changes.
   useEffect(() => {
     if (!myId) return;
-    const otherIds = new Set(
-      players.map((p) => p.id).filter((id) => id !== myId && id),
-    );
+    const otherIds = new Set(players.map((p) => p.id).filter((id) => id !== myId && id));
     for (const peerId of [...peersRef.current.keys()]) {
       if (!otherIds.has(peerId)) closePeer(peerId);
     }
     for (const peerId of otherIds) {
-      if (shouldInitiateTo(peerId) && !peersRef.current.has(peerId)) {
-        const pc = createPeer(peerId);
-        // Initiator pushes a fresh offer (negotiationneeded will fire after
-        // the audio transceiver is added in createPeer).
-        // We also explicitly trigger one here in case the synchronous
-        // addTransceiver doesn't fire negotiationneeded on every browser.
-        renegotiate(peerId);
-        // Touch pc so eslint doesn't complain (unused-var) — pc is real.
-        if (!pc) {
-          /* unreachable */
-        }
-      }
+      if (!peersRef.current.has(peerId)) createPeer(peerId);
+      if (shouldInitiateTo(peerId)) setTimeout(() => renegotiate(peerId), 120);
     }
+    socket.emit('webrtc_hello');
   }, [players, myId]);
 
-  // Socket signaling handlers.
   useEffect(() => {
     const onHello = ({ from }) => {
-      if (shouldInitiateTo(from)) {
-        // Make sure a peer exists; renegotiate kicks off the offer.
-        if (!peersRef.current.has(from)) createPeer(from);
-        renegotiate(from);
-      }
+      if (!from || from === myIdRef.current) return;
+      if (!peersRef.current.has(from)) createPeer(from);
+      if (shouldInitiateTo(from)) setTimeout(() => renegotiate(from), 80);
+      unlockRemoteAudio();
     };
     const onSignal = async ({ from, data }) => {
+      if (!from || from === myIdRef.current) return;
       let pc = peersRef.current.get(from);
       if (!pc) pc = createPeer(from);
       try {
         if (data.sdp) {
-          const desc = data.sdp;
-          await pc.setRemoteDescription(desc);
-          if (desc.type === 'offer') {
+          await pc.setRemoteDescription(data.sdp);
+          if (data.sdp.type === 'offer') {
+            if (localStreamRef.current) await addLocalTrackToPeer(pc, localStreamRef.current);
             const answer = await pc.createAnswer();
             await pc.setLocalDescription(answer);
-            socket.emit('webrtc_signal', {
-              to: from,
-              data: { sdp: pc.localDescription },
-            });
+            socket.emit('webrtc_signal', { to: from, data: { sdp: pc.localDescription } });
           }
         } else if (data.candidate) {
-          try {
-            await pc.addIceCandidate(data.candidate);
-          } catch (e) {
-            console.warn('[voice] addIceCandidate', e);
-          }
+          try { await pc.addIceCandidate(data.candidate); } catch (e) { console.warn('[voice] addIceCandidate', e); }
         }
+        unlockRemoteAudio();
       } catch (e) {
         console.warn('[voice] signal', e);
       }
@@ -323,14 +271,12 @@ export function useVoiceChat(players, myId) {
       socket.off('webrtc_hello', onHello);
       socket.off('webrtc_signal', onSignal);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [myId]);
 
   useEffect(() => {
     return () => {
       for (const id of [...peersRef.current.keys()]) closePeer(id);
-      if (localStreamRef.current)
-        localStreamRef.current.getTracks().forEach((t) => t.stop());
+      if (localStreamRef.current) localStreamRef.current.getTracks().forEach((t) => t.stop());
     };
   }, []);
 
