@@ -31,7 +31,7 @@ export default function CinematicEvents() {
           name: player?.name || 'Người chơi',
           amount: player?.totalContributed || amount,
         },
-        7200,
+        7600,
       );
     };
 
@@ -73,12 +73,31 @@ function AllInCinematic({ fx }) {
         id={`allin-audio-${fx.fxKey}`}
         src={ALL_IN_AUDIO_SRC}
         startAt={6.55}
-        playbackRate={1.1}
+        playbackRate={1.12}
       />
+      <div className="fx-scanlines" />
+      <div className="fx-green-vortex" />
       <div className="fx-skull-stage">
         <div className="fx-shockwave" />
         <div className="fx-shockwave two" />
-        <div className="fx-skull" aria-hidden="true">💀</div>
+        <div className="fx-shockwave three" />
+        <div className="fx-brain-cloud" aria-hidden="true">
+          <span className="brain b1" />
+          <span className="brain b2" />
+          <span className="brain b3" />
+          <span className="brain b4" />
+          <span className="brain b5" />
+        </div>
+        <div className="fx-bone-shards" aria-hidden="true">
+          {Array.from({ length: 12 }).map((_, i) => <i key={i} />)}
+        </div>
+        <div className="fx-skull-mask" aria-hidden="true">
+          <span className="eye left" />
+          <span className="eye right" />
+          <span className="nose" />
+          <span className="jaw" />
+          <span className="teeth" />
+        </div>
       </div>
       <div className="fx-allin-copy">
         <div className="fx-kicker">ALL IN</div>
