@@ -5,7 +5,7 @@ import {
   unregisterExternalMediaElement,
 } from '../media/casinoMedia.js';
 
-const ALL_IN_AUDIO_SRC = '/fx/63890366aeeb6e2cecb8407d4c3046ec.mp4';
+const ALL_IN_VIDEO_SRC = '/fx/63890366aeeb6e2cecb8407d4c3046ec.mp4';
 const END_AUDIO_SRC = '/fx/169f3da9234ddc76059714adb70c9111.mp4';
 
 export default function CinematicEvents() {
@@ -68,41 +68,21 @@ export default function CinematicEvents() {
 
 function AllInCinematic({ fx }) {
   return (
-    <div className="fx-full fx-allin-script" aria-live="polite">
-      <MediaSound
-        id={`allin-audio-${fx.fxKey}`}
-        src={ALL_IN_AUDIO_SRC}
+    <div className="fx-full fx-allin-clean" aria-live="polite">
+      <div className="fx-clean-backdrop" />
+      <div className="fx-clean-vortex" />
+      <div className="fx-clean-ring r1" />
+      <div className="fx-clean-ring r2" />
+      <ChromaKeyVideo
+        id={`allin-keyed-${fx.fxKey}`}
+        src={ALL_IN_VIDEO_SRC}
         startAt={6.55}
         playbackRate={1.12}
       />
-      <div className="fx-scanlines" />
-      <div className="fx-green-vortex" />
-      <div className="fx-skull-stage">
-        <div className="fx-shockwave" />
-        <div className="fx-shockwave two" />
-        <div className="fx-shockwave three" />
-        <div className="fx-brain-cloud" aria-hidden="true">
-          <span className="brain b1" />
-          <span className="brain b2" />
-          <span className="brain b3" />
-          <span className="brain b4" />
-          <span className="brain b5" />
-        </div>
-        <div className="fx-bone-shards" aria-hidden="true">
-          {Array.from({ length: 12 }).map((_, i) => <i key={i} />)}
-        </div>
-        <div className="fx-skull-mask" aria-hidden="true">
-          <span className="eye left" />
-          <span className="eye right" />
-          <span className="nose" />
-          <span className="jaw" />
-          <span className="teeth" />
-        </div>
-      </div>
-      <div className="fx-allin-copy">
-        <div className="fx-kicker">ALL IN</div>
-        <div className="fx-player">{fx.name}</div>
-        <div className="fx-amount">{formatChips(fx.amount)} búng</div>
+      <div className="fx-clean-copy">
+        <div className="fx-clean-kicker">ALL IN</div>
+        <div className="fx-clean-player">{fx.name}</div>
+        <div className="fx-clean-amount">{formatChips(fx.amount)} búng</div>
       </div>
     </div>
   );
@@ -127,6 +107,92 @@ function EndCinematic({ fx }) {
   );
 }
 
+function ChromaKeyVideo({ id, src, startAt = 0, playbackRate = 1 }) {
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const rafRef = useRef(0);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    if (failed) return undefined;
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas) return undefined;
+
+    registerExternalMediaElement(id, video, 'sfx');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    const size = 720;
+    canvas.width = size;
+    canvas.height = size;
+
+    const draw = () => {
+      if (!ctx || video.readyState < 2) {
+        rafRef.current = requestAnimationFrame(draw);
+        return;
+      }
+      const vw = video.videoWidth || 720;
+      const vh = video.videoHeight || 1280;
+      const sourceSize = Math.min(vw, vh);
+      const sx = Math.max(0, (vw - sourceSize) / 2);
+      // Slightly upper-middle crop: keeps the skull/brain and drops the TikTok watermark.
+      const sy = Math.max(0, (vh - sourceSize) * 0.42);
+      ctx.clearRect(0, 0, size, size);
+      ctx.drawImage(video, sx, sy, sourceSize, sourceSize, 0, 0, size, size);
+      try {
+        const frame = ctx.getImageData(0, 0, size, size);
+        const data = frame.data;
+        for (let i = 0; i < data.length; i += 4) {
+          const r = data[i];
+          const g = data[i + 1];
+          const b = data[i + 2];
+          const isGreen = g > 82 && g > r * 1.18 && g > b * 1.18;
+          const isBrightGreen = g > 120 && r < 115 && b < 125;
+          if (isGreen || isBrightGreen) {
+            const strength = Math.min(255, Math.max(0, (g - Math.max(r, b)) * 3.2));
+            data[i + 3] = Math.max(0, 255 - strength);
+          }
+        }
+        ctx.putImageData(frame, 0, 0);
+      } catch {
+        // If a browser refuses pixel access, the canvas still shows the video frame.
+      }
+      rafRef.current = requestAnimationFrame(draw);
+    };
+
+    const play = () => {
+      try { video.currentTime = startAt; } catch {}
+      video.playbackRate = playbackRate;
+      video.play().catch(() => {});
+      draw();
+    };
+
+    if (video.readyState >= 1) play();
+    else video.addEventListener('loadedmetadata', play, { once: true });
+
+    return () => {
+      unregisterExternalMediaElement(id);
+      cancelAnimationFrame(rafRef.current);
+      video.pause();
+      video.removeEventListener('loadedmetadata', play);
+    };
+  }, [id, src, startAt, playbackRate, failed]);
+
+  if (failed) return <div className="fx-clean-fallback">💀</div>;
+  return (
+    <>
+      <video
+        ref={videoRef}
+        className="fx-key-source"
+        src={src}
+        playsInline
+        preload="auto"
+        onError={() => setFailed(true)}
+      />
+      <canvas ref={canvasRef} className="fx-key-canvas" />
+    </>
+  );
+}
+
 function MediaSound({ id, src, startAt = 0, playbackRate = 1 }) {
   const ref = useRef(null);
 
@@ -135,9 +201,7 @@ function MediaSound({ id, src, startAt = 0, playbackRate = 1 }) {
     if (!el) return undefined;
     registerExternalMediaElement(id, el, 'sfx');
     const play = () => {
-      try {
-        el.currentTime = startAt;
-      } catch {}
+      try { el.currentTime = startAt; } catch {}
       el.playbackRate = playbackRate;
       el.play().catch(() => {});
     };
