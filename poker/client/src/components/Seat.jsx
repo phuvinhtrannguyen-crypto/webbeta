@@ -2,6 +2,7 @@ import Card from './Card.jsx';
 
 const STATUS_LABEL = {
   waiting: 'Đang chờ',
+  queued: 'Vào ván sau',
   playing: 'Đang chơi',
   folded: 'Fold',
   allin: 'All-in',

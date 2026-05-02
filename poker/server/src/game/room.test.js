@@ -257,3 +257,30 @@ test('room accepts up to 20 players (rejects 21st)', () => {
   assert.equal(room.players.size, 20);
   assert.throws(() => room.addPlayer('p20', 'P20'), /full/);
 });
+
+test('mid-hand joiners are queued, then auto-promoted on next startHand', () => {
+  const { room } = makeRoom();
+  ['a', 'b', 'c', 'd'].forEach((id) => room.addPlayer(id, id.toUpperCase()));
+  room.startHand('a');
+  assert.equal(room.phase, 'preflop');
+  // E joins mid-hand → status='queued', not dealt.
+  room.addPlayer('e', 'E');
+  assert.equal(room.players.get('e').status, 'queued');
+  assert.equal(room.players.get('e').hole.length, 0);
+  // After hand ends, _returnToWaiting auto-starts the next hand and E gets dealt.
+  room._returnToWaiting();
+  assert.equal(room.players.get('e').status, 'playing');
+  assert.equal(room.players.get('e').hole.length, 2);
+});
+
+test('_returnToWaiting does NOT auto-start when only 1 eligible player remains', () => {
+  const { room } = makeRoom();
+  room.addPlayer('a', 'A');
+  room.addPlayer('b', 'B');
+  room.startHand('a');
+  // Drain B's stack so they become a spectator.
+  room.players.get('b').stack = 0;
+  room._returnToWaiting();
+  // Only 1 eligible (A) → must NOT auto-start; stay in 'waiting'.
+  assert.equal(room.phase, 'waiting');
+});

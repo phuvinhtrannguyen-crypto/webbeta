@@ -55,11 +55,16 @@ export class PokerRoom {
   addPlayer(socketId, name) {
     if (this.players.size >= 20) throw new Error('Room is full (max 20)');
     if (this.players.has(socketId)) return this.players.get(socketId);
+    // If a hand is currently in progress, the new player can't be dealt in
+    // mid-hand — they sit out as 'queued' (will be auto-promoted to 'playing'
+    // by the next startHand reset loop). Otherwise they're a normal waiter.
+    const handActive = !['waiting', 'finished'].includes(this.phase);
     const player = {
       id: socketId,
       name: (name || 'Player').slice(0, 20),
       stack: STARTING_STACK,
-      status: 'waiting', // waiting | playing | folded | allin | winner | loser
+      // queued | waiting | playing | folded | allin | winner | loser
+      status: handActive ? 'queued' : 'waiting',
       hole: [], // [{rank, suit, code}]
       currentBet: 0, // bet within current round
       totalContributed: 0, // total this hand (for side pots)
@@ -699,6 +704,26 @@ export class PokerRoom {
     // the hand), notify the owner so the room can be dropped from memory.
     if (this.players.size === 0 && typeof this.onEmpty === 'function') {
       this.onEmpty();
+      return;
+    }
+
+    // Auto-start the next hand so latecomers (status='queued') and anyone with
+    // chips left don't sit idle waiting for the host to manually click. The
+    // host can leave the room to stop. We require at least 2 connected
+    // players with stack > 0; otherwise we stay in 'waiting' until either a
+    // new player joins or someone gets chips back.
+    const eligible = [...this.players.values()].filter(
+      (p) => p.connected && p.stack > 0,
+    );
+    if (eligible.length >= 2 && this.hostSocketId) {
+      try {
+        this.startHand(this.hostSocketId);
+      } catch (e) {
+        // Defensive: if anything blocks the auto-start, stay in 'waiting' so
+        // the host can re-trigger manually.
+        // eslint-disable-next-line no-console
+        console.warn('[room] auto-start failed', e.message);
+      }
     }
   }
 
