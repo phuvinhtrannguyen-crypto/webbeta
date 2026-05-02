@@ -9,18 +9,27 @@ import RiverIntro from '../components/RiverIntro.jsx';
 import { useVoiceChat } from '../hooks/useVoiceChat.js';
 import { useActionCountdown } from '../hooks/useActionCountdown.js';
 
-const SEAT_POSITIONS = [
-  // positions around an oval. Index 0 = current player bottom center.
-  { top: '82%', left: '50%' },
-  { top: '70%', left: '18%' },
-  { top: '40%', left: '8%' },
-  { top: '14%', left: '25%' },
-  { top: '8%', left: '50%' },
-  { top: '14%', left: '75%' },
-  { top: '40%', left: '92%' },
-  { top: '70%', left: '82%' },
-  { top: '82%', left: '35%' },
-];
+// Generate seat positions evenly distributed around an oval. Seat 0 sits at
+// the bottom-center (the local player's POV) and the rest fill clockwise.
+// Supports up to 20 seats; the oval radius below is tuned so seats stay
+// visible inside the table at any count.
+function seatPositions(n) {
+  const positions = [];
+  // Center + radii are in % of the oval's bounding box.
+  const cx = 50;
+  const cy = 50;
+  // Push seats slightly outside the green felt so name plates don't cover cards.
+  const rx = 46;
+  const ry = 42;
+  for (let i = 0; i < n; i += 1) {
+    // Start at bottom (angle = π/2) and go counter-clockwise around the oval.
+    const t = Math.PI / 2 + (i * 2 * Math.PI) / n;
+    const x = cx + rx * Math.cos(t);
+    const y = cy + ry * Math.sin(t);
+    positions.push({ top: `${y}%`, left: `${x}%` });
+  }
+  return positions;
+}
 
 export default function Table({ room, setRoom, onLeave, me }) {
   const state = room?.state;
@@ -126,6 +135,9 @@ export default function Table({ room, setRoom, onLeave, me }) {
     return rotated;
   }, [state, me]);
 
+  // Distribute seats around the oval based on actual player count (up to 20).
+  const seats = useMemo(() => seatPositions(orderedPlayers.length || 1), [orderedPlayers.length]);
+
   if (!state) {
     return (
       <div className="table-loading">
@@ -190,7 +202,11 @@ export default function Table({ room, setRoom, onLeave, me }) {
       </header>
 
       <main className="table-main">
-        <div className="poker-table">
+        <div
+          className={`poker-table seats-${
+            orderedPlayers.length >= 13 ? 'xs' : orderedPlayers.length >= 9 ? 'sm' : 'md'
+          }`}
+        >
           <div className="table-felt">
             <div className="pot">
               <div className="pot-label">POT</div>
@@ -224,7 +240,7 @@ export default function Table({ room, setRoom, onLeave, me }) {
             <Seat
               key={p.id}
               player={p}
-              position={SEAT_POSITIONS[i] || SEAT_POSITIONS[0]}
+              position={seats[i] || seats[0]}
               isMe={p.id === me}
               isDealer={p.id === state.dealerId}
               isActing={p.id === state.actingId}

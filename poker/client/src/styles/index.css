@@ -483,6 +483,34 @@ input {
   position: relative;
 }
 
+/* Shrink seat plates when the table is crowded so 9–20 players still fit. */
+.poker-table.seats-sm .seat-card {
+  min-width: 110px;
+  padding: 6px 8px;
+  font-size: 0.78rem;
+}
+.poker-table.seats-sm .seat-stack {
+  font-size: 0.82rem;
+}
+.poker-table.seats-xs .seat-card {
+  min-width: 86px;
+  padding: 4px 6px;
+  font-size: 0.7rem;
+  border-radius: 9px;
+}
+.poker-table.seats-xs .seat-stack {
+  font-size: 0.74rem;
+}
+.poker-table.seats-xs .seat-status,
+.poker-table.seats-xs .seat-hand,
+.poker-table.seats-xs .seat-bet {
+  font-size: 0.66rem;
+}
+.poker-table.seats-xs .seat-cards {
+  transform: scale(0.7);
+  transform-origin: top center;
+}
+
 .seat.acting .seat-card {
   border-color: var(--gold);
   box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.4), 0 8px 20px rgba(0, 0, 0, 0.5);

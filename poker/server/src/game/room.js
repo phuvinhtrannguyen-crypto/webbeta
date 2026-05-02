@@ -53,7 +53,7 @@ export class PokerRoom {
 
   // ---------- lifecycle ----------
   addPlayer(socketId, name) {
-    if (this.players.size >= 9) throw new Error('Room is full (max 9)');
+    if (this.players.size >= 20) throw new Error('Room is full (max 20)');
     if (this.players.has(socketId)) return this.players.get(socketId);
     const player = {
       id: socketId,

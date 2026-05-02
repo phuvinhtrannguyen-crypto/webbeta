@@ -248,3 +248,12 @@ test('_returnToWaiting cleans up disconnected players', () => {
   assert.ok(!room.players.has('c'), 'c removed on return to waiting');
   assert.ok(!room.seatOrder.includes('c'));
 });
+
+test('room accepts up to 20 players (rejects 21st)', () => {
+  const { room } = makeRoom();
+  for (let i = 0; i < 20; i += 1) {
+    room.addPlayer(`p${i}`, `P${i}`);
+  }
+  assert.equal(room.players.size, 20);
+  assert.throws(() => room.addPlayer('p20', 'P20'), /full/);
+});
