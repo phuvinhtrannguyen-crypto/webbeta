@@ -5,7 +5,13 @@ import {
   unregisterExternalMediaElement,
 } from '../media/casinoMedia.js';
 
-const ALL_IN_VIDEO_SRC = '/fx/63890366aeeb6e2cecb8407d4c3046ec.mp4';
+const ALL_IN_VIDEO_SOURCES = [
+  '/fx/tiktok no nm.mp4',
+  '/fx/tiktok-no-nm.mp4',
+  '/fx/tiktok_no_nm.mp4',
+  '/fx/63890366aeeb6e2cecb8407d4c3046ec.mp4',
+];
+const OLD_ALL_IN_VIDEO_SRC = '/fx/63890366aeeb6e2cecb8407d4c3046ec.mp4';
 const END_AUDIO_SRC = '/fx/169f3da9234ddc76059714adb70c9111.mp4';
 
 export default function CinematicEvents() {
@@ -75,8 +81,9 @@ function AllInCinematic({ fx }) {
       <div className="fx-clean-ring r2" />
       <ChromaKeyVideo
         id={`allin-keyed-${fx.fxKey}`}
-        src={ALL_IN_VIDEO_SRC}
-        startAt={6.55}
+        sources={ALL_IN_VIDEO_SOURCES}
+        startAt={0}
+        fallbackStartAt={6.55}
         playbackRate={1.12}
       />
       <div className="fx-clean-copy">
@@ -107,11 +114,14 @@ function EndCinematic({ fx }) {
   );
 }
 
-function ChromaKeyVideo({ id, src, startAt = 0, playbackRate = 1 }) {
+function ChromaKeyVideo({ id, sources, startAt = 0, fallbackStartAt = 0, playbackRate = 1 }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const rafRef = useRef(0);
+  const [sourceIndex, setSourceIndex] = useState(0);
   const [failed, setFailed] = useState(false);
+  const activeSrc = sources[sourceIndex] || sources[0];
+  const isOldFallback = activeSrc === OLD_ALL_IN_VIDEO_SRC;
 
   useEffect(() => {
     if (failed) return undefined;
@@ -132,10 +142,13 @@ function ChromaKeyVideo({ id, src, startAt = 0, playbackRate = 1 }) {
       }
       const vw = video.videoWidth || 720;
       const vh = video.videoHeight || 1280;
-      const sourceSize = Math.min(vw, vh);
-      const sx = Math.max(0, (vw - sourceSize) / 2);
-      // Slightly upper-middle crop: keeps the skull/brain and drops the TikTok watermark.
-      const sy = Math.max(0, (vh - sourceSize) * 0.42);
+      const base = Math.min(vw, vh);
+      // Tight center crop: makes the skull much bigger and avoids bottom-right watermark.
+      const sourceSize = Math.max(260, base * (isOldFallback ? 0.52 : 0.56));
+      const targetX = vw * 0.5;
+      const targetY = vh * (isOldFallback ? 0.61 : 0.58);
+      const sx = Math.min(vw - sourceSize, Math.max(0, targetX - sourceSize / 2));
+      const sy = Math.min(vh - sourceSize, Math.max(0, targetY - sourceSize / 2));
       ctx.clearRect(0, 0, size, size);
       ctx.drawImage(video, sx, sy, sourceSize, sourceSize, 0, 0, size, size);
       try {
@@ -145,10 +158,13 @@ function ChromaKeyVideo({ id, src, startAt = 0, playbackRate = 1 }) {
           const r = data[i];
           const g = data[i + 1];
           const b = data[i + 2];
-          const isGreen = g > 82 && g > r * 1.18 && g > b * 1.18;
-          const isBrightGreen = g > 120 && r < 115 && b < 125;
-          if (isGreen || isBrightGreen) {
-            const strength = Math.min(255, Math.max(0, (g - Math.max(r, b)) * 3.2));
+          const maxRB = Math.max(r, b);
+          const greenLead = g - maxRB;
+          const isGreen = g > 58 && g > r * 1.04 && g > b * 1.04;
+          const isBrightGreen = g > 105 && r < 135 && b < 135;
+          const isDarkGreen = g > 45 && greenLead > 14 && r < 80 && b < 85;
+          if (isGreen || isBrightGreen || isDarkGreen) {
+            const strength = Math.min(255, Math.max(0, greenLead * 5.8));
             data[i + 3] = Math.max(0, 255 - strength);
           }
         }
@@ -160,7 +176,7 @@ function ChromaKeyVideo({ id, src, startAt = 0, playbackRate = 1 }) {
     };
 
     const play = () => {
-      try { video.currentTime = startAt; } catch {}
+      try { video.currentTime = isOldFallback ? fallbackStartAt : startAt; } catch {}
       video.playbackRate = playbackRate;
       video.play().catch(() => {});
       draw();
@@ -175,18 +191,27 @@ function ChromaKeyVideo({ id, src, startAt = 0, playbackRate = 1 }) {
       video.pause();
       video.removeEventListener('loadedmetadata', play);
     };
-  }, [id, src, startAt, playbackRate, failed]);
+  }, [id, activeSrc, startAt, fallbackStartAt, playbackRate, failed, isOldFallback]);
+
+  const tryNextSource = () => {
+    if (sourceIndex < sources.length - 1) {
+      setSourceIndex((i) => i + 1);
+    } else {
+      setFailed(true);
+    }
+  };
 
   if (failed) return <div className="fx-clean-fallback">💀</div>;
   return (
     <>
       <video
         ref={videoRef}
+        key={activeSrc}
         className="fx-key-source"
-        src={src}
+        src={activeSrc}
         playsInline
         preload="auto"
-        onError={() => setFailed(true)}
+        onError={tryNextSource}
       />
       <canvas ref={canvasRef} className="fx-key-canvas" />
     </>
