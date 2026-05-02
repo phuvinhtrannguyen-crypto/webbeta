@@ -5,10 +5,8 @@ import {
   unregisterExternalMediaElement,
 } from '../media/casinoMedia.js';
 
-// Uploaded files in public/fx. The 169f video is the end cinematic;
-// the other uploaded mp4 is the all-in-left cinematic.
-const ALL_IN_VIDEO_SRC = '/fx/63890366aeeb6e2cecb8407d4c3046ec.mp4';
-const END_VIDEO_SRC = '/fx/169f3da9234ddc76059714adb70c9111.mp4';
+const ALL_IN_AUDIO_SRC = '/fx/63890366aeeb6e2cecb8407d4c3046ec.mp4';
+const END_AUDIO_SRC = '/fx/169f3da9234ddc76059714adb70c9111.mp4';
 
 export default function CinematicEvents() {
   const [allInFx, setAllInFx] = useState(null);
@@ -33,7 +31,7 @@ export default function CinematicEvents() {
           name: player?.name || 'Người chơi',
           amount: player?.totalContributed || amount,
         },
-        8200,
+        7200,
       );
     };
 
@@ -46,7 +44,7 @@ export default function CinematicEvents() {
           name: topWinner?.name || 'Ván đấu',
           amount: topWinner?.amount || pot,
         },
-        15000,
+        32000,
       );
     };
 
@@ -70,87 +68,70 @@ export default function CinematicEvents() {
 
 function AllInCinematic({ fx }) {
   return (
-    <div className="cinematic cinematic-allin" aria-live="polite">
-      <div className="allin-video-shell">
-        <SideVideo
-          id={`allin-video-${fx.fxKey}`}
-          src={ALL_IN_VIDEO_SRC}
-          startAt={6.55}
-          playbackRate={1.08}
-          className="allin-video"
-          fallbackClassName="allin-video-fallback"
-        />
-        <div className="allin-video-badge">ALL-IN CAM</div>
+    <div className="fx-full fx-allin-script" aria-live="polite">
+      <MediaSound
+        id={`allin-audio-${fx.fxKey}`}
+        src={ALL_IN_AUDIO_SRC}
+        startAt={6.55}
+        playbackRate={1.1}
+      />
+      <div className="fx-skull-stage">
+        <div className="fx-shockwave" />
+        <div className="fx-shockwave two" />
+        <div className="fx-skull" aria-hidden="true">💀</div>
       </div>
-      <div className="allin-copy">
-        <div className="allin-kicker">TẤT TAY</div>
-        <div className="allin-name">{fx.name}</div>
-        <div className="allin-sub">đẩy hết búng lên bàn</div>
-        <div className="allin-amount">{formatChips(fx.amount)} búng</div>
+      <div className="fx-allin-copy">
+        <div className="fx-kicker">ALL IN</div>
+        <div className="fx-player">{fx.name}</div>
+        <div className="fx-amount">{formatChips(fx.amount)} búng</div>
       </div>
-      <div className="allin-chip-rain" />
     </div>
   );
 }
 
 function EndCinematic({ fx }) {
   return (
-    <div className="cinematic cinematic-end" aria-live="polite">
-      <div className="end-video-shell">
-        <SideVideo
-          id={`end-video-${fx.fxKey}`}
-          src={END_VIDEO_SRC}
-          playbackRate={2}
-          className="end-video"
-          fallbackClassName="end-video-fallback"
-        />
-        <div className="end-video-glow" />
-      </div>
-      <div className="end-copy">
-        <span>THIS IS THE END</span>
-        <b>{fx.name}</b>
-        {fx.amount ? <small>+{formatChips(fx.amount)} búng</small> : null}
+    <div className="fx-full fx-end-script" aria-live="polite">
+      <MediaSound
+        id={`end-audio-${fx.fxKey}`}
+        src={END_AUDIO_SRC}
+        playbackRate={2}
+      />
+      <div className="fx-end-grain" />
+      <div className="fx-end-words">
+        <div className="fx-end-pre">FEEL THE EARTH MOVE</div>
+        <div className="fx-end-title">THIS IS THE END</div>
+        <div className="fx-end-winner">{fx.name}</div>
+        {fx.amount ? <div className="fx-end-amount">+{formatChips(fx.amount)} búng</div> : null}
       </div>
     </div>
   );
 }
 
-function SideVideo({ id, src, startAt = 0, playbackRate = 1, className, fallbackClassName }) {
-  const videoRef = useRef(null);
-  const [failed, setFailed] = useState(false);
+function MediaSound({ id, src, startAt = 0, playbackRate = 1 }) {
+  const ref = useRef(null);
 
   useEffect(() => {
-    if (failed) return undefined;
-    const video = videoRef.current;
-    if (!video) return undefined;
-    registerExternalMediaElement(id, video, 'sfx');
+    const el = ref.current;
+    if (!el) return undefined;
+    registerExternalMediaElement(id, el, 'sfx');
     const play = () => {
       try {
-        video.currentTime = startAt;
+        el.currentTime = startAt;
       } catch {}
-      video.playbackRate = playbackRate;
-      video.play().catch(() => {});
+      el.playbackRate = playbackRate;
+      el.play().catch(() => {});
     };
-    if (video.readyState >= 1) play();
-    else video.addEventListener('loadedmetadata', play, { once: true });
+    if (el.readyState >= 1) play();
+    else el.addEventListener('loadedmetadata', play, { once: true });
     return () => {
       unregisterExternalMediaElement(id);
-      video.pause();
-      video.removeEventListener('loadedmetadata', play);
+      el.pause();
+      el.removeEventListener('loadedmetadata', play);
     };
-  }, [id, src, startAt, playbackRate, failed]);
+  }, [id, src, startAt, playbackRate]);
 
-  if (failed) return <div className={fallbackClassName} />;
-  return (
-    <video
-      ref={videoRef}
-      className={className}
-      src={src}
-      playsInline
-      preload="auto"
-      onError={() => setFailed(true)}
-    />
-  );
+  return <audio ref={ref} className="fx-audio" src={src} preload="auto" />;
 }
 
 function formatChips(value) {
