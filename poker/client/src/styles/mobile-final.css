@@ -1,0 +1,227 @@
+/* Final mobile fit + cleaned all-in cinematic overrides. Loaded last. */
+html, body, #root {
+  width: 100%;
+  min-height: 100dvh;
+  overflow-x: hidden !important;
+  background: #050915;
+}
+body {
+  overflow-y: auto !important;
+}
+
+.fx-key-source {
+  position: fixed;
+  width: 1px;
+  height: 1px;
+  left: -9999px;
+  opacity: 0;
+}
+
+.fx-allin-clean {
+  background: rgba(0, 0, 0, .82);
+  animation: fxFade .18s ease both, fxScreenBump .12s linear 4 .22s;
+}
+.fx-clean-backdrop {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 50% 45%, rgba(81,255,169,.26), transparent 27%),
+    radial-gradient(circle at 50% 50%, rgba(0,0,0,.08), rgba(0,0,0,.92) 72%),
+    linear-gradient(180deg, rgba(3, 33, 22, .82), rgba(0,0,0,.96));
+}
+.fx-clean-vortex {
+  position: absolute;
+  width: min(105vw, 620px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background:
+    repeating-radial-gradient(circle, rgba(111,255,183,.23) 0 2px, transparent 2px 17px),
+    conic-gradient(from 45deg, transparent, rgba(111,255,183,.22), transparent, rgba(255,255,255,.12), transparent);
+  filter: drop-shadow(0 0 44px rgba(78,255,166,.45));
+  opacity: .88;
+  animation: fxVortexSpin 2.6s linear infinite, fxVortexBreath .7s ease-in-out infinite alternate;
+}
+.fx-clean-ring {
+  position: absolute;
+  width: min(62vw, 360px);
+  aspect-ratio: 1;
+  border: 2px solid rgba(160,255,210,.62);
+  border-radius: 50%;
+  box-shadow: 0 0 24px rgba(90,255,177,.42), inset 0 0 24px rgba(90,255,177,.16);
+  animation: fxRingOut 1s ease-out infinite;
+}
+.fx-clean-ring.r2 { animation-delay: .34s; width: min(78vw, 440px); opacity: .7; }
+.fx-key-canvas {
+  position: relative;
+  z-index: 3;
+  width: min(58vw, 310px);
+  height: min(58vw, 310px);
+  object-fit: contain;
+  filter:
+    drop-shadow(0 0 26px rgba(112,255,188,.82))
+    drop-shadow(0 22px 34px rgba(0,0,0,.58))
+    saturate(1.12)
+    contrast(1.08);
+  animation: fxKeyPop .56s cubic-bezier(.18,1.38,.3,1) both, fxKeyFloat .5s ease-in-out .56s infinite alternate;
+}
+.fx-clean-fallback {
+  position: relative;
+  z-index: 3;
+  font-size: min(40vw, 220px);
+  filter: drop-shadow(0 0 24px rgba(112,255,188,.75));
+}
+.fx-clean-copy {
+  position: absolute;
+  z-index: 4;
+  left: 16px;
+  right: 16px;
+  bottom: max(7dvh, 48px);
+  text-align: center;
+}
+.fx-clean-kicker {
+  font-size: clamp(38px, 14vw, 78px);
+  font-weight: 1000;
+  letter-spacing: .2em;
+  color: #75ffb5;
+  text-shadow: 0 0 28px rgba(81,255,169,.85), 0 6px 0 rgba(0,0,0,.22);
+}
+.fx-clean-player {
+  margin-top: 4px;
+  font-size: clamp(24px, 7vw, 40px);
+  color: white;
+  font-weight: 950;
+  text-shadow: 0 4px 18px rgba(0,0,0,.72);
+}
+.fx-clean-amount {
+  margin-top: 8px;
+  font-size: clamp(18px, 5vw, 28px);
+  color: #fff0a8;
+  font-weight: 950;
+  text-shadow: 0 4px 18px rgba(0,0,0,.72);
+}
+
+@keyframes fxKeyPop {
+  0% { transform: scale(.35) translateY(70px); opacity: 0; filter: blur(8px) drop-shadow(0 0 0 transparent); }
+  62% { transform: scale(1.12) translateY(-10px); opacity: 1; }
+  100% { transform: scale(1) translateY(0); opacity: 1; }
+}
+@keyframes fxKeyFloat { from { transform: translateY(-5px) rotate(-1deg) scale(.99); } to { transform: translateY(5px) rotate(1deg) scale(1.03); } }
+@keyframes fxRingOut { from { transform: scale(.65); opacity: .95; } to { transform: scale(1.55); opacity: 0; } }
+@keyframes fxVortexBreath { from { transform: scale(.92); opacity: .68; } to { transform: scale(1.06); opacity: .94; } }
+@keyframes fxScreenBump { 0%,100% { transform: translate(0,0); } 50% { transform: translate(0, -3px); } }
+
+@media (max-width: 760px) {
+  .table-page {
+    height: auto !important;
+    min-height: 100dvh !important;
+    overflow-x: hidden !important;
+    overflow-y: visible !important;
+  }
+  .topbar {
+    position: relative !important;
+    width: 100vw !important;
+    min-height: 96px !important;
+    padding: 8px 10px !important;
+    border-radius: 0 0 18px 18px !important;
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) auto !important;
+    grid-template-areas: "room actions" "hand actions" !important;
+    gap: 6px 8px !important;
+  }
+  .room-info { grid-area: room !important; }
+  .hand-info { grid-area: hand !important; font-size: 13px !important; line-height: 1.22 !important; }
+  .top-actions {
+    grid-area: actions !important;
+    display: grid !important;
+    grid-template-columns: repeat(3, 50px) !important;
+    gap: 6px !important;
+    align-content: center !important;
+  }
+  .top-actions .btn { width: 50px !important; min-width: 50px !important; height: 48px !important; font-size: 12px !important; padding: 0 !important; }
+  .room-info .code { font-size: clamp(27px, 9vw, 38px) !important; letter-spacing: .14em !important; }
+  .copy-btn { width: 42px !important; height: 40px !important; }
+
+  .table-main {
+    width: 100vw !important;
+    flex: 0 0 auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 6px !important;
+    padding: 0 !important;
+  }
+  .poker-table {
+    width: 100vw !important;
+    flex: 0 0 auto !important;
+    height: clamp(390px, 56dvh, 540px) !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+  .table-felt {
+    position: absolute !important;
+    left: 50% !important;
+    top: 48px !important;
+    right: auto !important;
+    bottom: auto !important;
+    transform: translateX(-50%) !important;
+    width: min(78vw, 370px) !important;
+    height: clamp(320px, 44dvh, 420px) !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    border-radius: 47% / 34% !important;
+  }
+  .pot { top: 18% !important; transform: translateX(-50%) scale(.9) !important; }
+  .community { gap: 4px !important; transform: translateY(12px) scale(.94); }
+  .community-slot, .community-slot .card, .community .card { width: clamp(39px, 10.6vw, 52px) !important; height: clamp(56px, 14.8vw, 76px) !important; }
+  .seat-card { min-width: 112px !important; max-width: 142px !important; padding: 7px 9px !important; }
+  .seat-cards { transform: scale(.76) !important; margin-bottom: -12px !important; }
+  .seat-cards .card, .hole-cards .card, .seat-hole .card { width: 40px !important; height: 57px !important; }
+
+  .side-panel {
+    width: calc(100vw - 16px) !important;
+    min-height: 0 !important;
+    flex: 0 0 auto !important;
+    margin: 0 8px 6px !important;
+    align-self: center !important;
+  }
+  .chat-panel { min-height: 118px !important; max-height: 146px !important; }
+  .chat-log { max-height: 56px !important; padding: 7px 10px !important; }
+  .chat-header { padding: 8px 12px !important; }
+  .chat-input { padding: 7px !important; }
+  .chat-input input { min-height: 44px !important; }
+  .chat-input button { min-height: 44px !important; min-width: 72px !important; }
+
+  .bottom-bar {
+    position: relative !important;
+    flex: 0 0 auto !important;
+    margin: 0 !important;
+    padding: 8px 9px max(9px, env(safe-area-inset-bottom)) !important;
+    border-radius: 16px 16px 0 0 !important;
+  }
+  .betbar { gap: 7px !important; }
+  .betbar-left { grid-template-columns: repeat(3, 1fr) !important; gap: 6px !important; }
+  .my-stack { padding: 6px !important; }
+  .my-stack .label { font-size: 11px !important; }
+  .my-stack .value { font-size: .98rem !important; }
+  .quick-chips { gap: 6px !important; }
+  .chip { padding: 9px 4px !important; font-size: 12px !important; }
+  .amount-row input { min-height: 44px !important; }
+  .btn-action { min-height: 48px !important; font-size: 15px !important; }
+
+  .fx-key-canvas { width: min(64vw, 320px); height: min(64vw, 320px); }
+  .fx-clean-copy { bottom: max(6dvh, 42px); }
+}
+
+@media (max-width: 390px) {
+  .topbar { min-height: 92px !important; }
+  .top-actions { grid-template-columns: repeat(3, 47px) !important; }
+  .top-actions .btn { width: 47px !important; min-width: 47px !important; height: 46px !important; }
+  .poker-table { height: clamp(372px, 54dvh, 500px) !important; }
+  .table-felt { top: 42px !important; width: 76vw !important; height: clamp(304px, 42dvh, 390px) !important; }
+  .room-info .code { font-size: clamp(25px, 8.5vw, 35px) !important; }
+  .seat-card { min-width: 106px !important; max-width: 134px !important; }
+  .fx-key-canvas { width: min(67vw, 300px); height: min(67vw, 300px); }
+}
