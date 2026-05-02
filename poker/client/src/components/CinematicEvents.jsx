@@ -5,13 +5,13 @@ import {
   unregisterExternalMediaElement,
 } from '../media/casinoMedia.js';
 
+// New no-logo all-in video. Put it in: poker/client/public/fx/
+// Supported names below so spaces/dashes/underscores all work.
 const ALL_IN_VIDEO_SOURCES = [
   '/fx/tiktok no nm.mp4',
   '/fx/tiktok-no-nm.mp4',
   '/fx/tiktok_no_nm.mp4',
-  '/fx/63890366aeeb6e2cecb8407d4c3046ec.mp4',
 ];
-const OLD_ALL_IN_VIDEO_SRC = '/fx/63890366aeeb6e2cecb8407d4c3046ec.mp4';
 const END_AUDIO_SRC = '/fx/169f3da9234ddc76059714adb70c9111.mp4';
 
 export default function CinematicEvents() {
@@ -83,7 +83,6 @@ function AllInCinematic({ fx }) {
         id={`allin-keyed-${fx.fxKey}`}
         sources={ALL_IN_VIDEO_SOURCES}
         startAt={0}
-        fallbackStartAt={6.55}
         playbackRate={1.12}
       />
       <div className="fx-clean-copy">
@@ -114,14 +113,13 @@ function EndCinematic({ fx }) {
   );
 }
 
-function ChromaKeyVideo({ id, sources, startAt = 0, fallbackStartAt = 0, playbackRate = 1 }) {
+function ChromaKeyVideo({ id, sources, startAt = 0, playbackRate = 1 }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const rafRef = useRef(0);
   const [sourceIndex, setSourceIndex] = useState(0);
   const [failed, setFailed] = useState(false);
   const activeSrc = sources[sourceIndex] || sources[0];
-  const isOldFallback = activeSrc === OLD_ALL_IN_VIDEO_SRC;
 
   useEffect(() => {
     if (failed) return undefined;
@@ -143,10 +141,9 @@ function ChromaKeyVideo({ id, sources, startAt = 0, fallbackStartAt = 0, playbac
       const vw = video.videoWidth || 720;
       const vh = video.videoHeight || 1280;
       const base = Math.min(vw, vh);
-      // Tight center crop: makes the skull much bigger and avoids bottom-right watermark.
-      const sourceSize = Math.max(260, base * (isOldFallback ? 0.52 : 0.56));
+      const sourceSize = Math.max(260, base * 0.56);
       const targetX = vw * 0.5;
-      const targetY = vh * (isOldFallback ? 0.61 : 0.58);
+      const targetY = vh * 0.58;
       const sx = Math.min(vw - sourceSize, Math.max(0, targetX - sourceSize / 2));
       const sy = Math.min(vh - sourceSize, Math.max(0, targetY - sourceSize / 2));
       ctx.clearRect(0, 0, size, size);
@@ -169,14 +166,12 @@ function ChromaKeyVideo({ id, sources, startAt = 0, fallbackStartAt = 0, playbac
           }
         }
         ctx.putImageData(frame, 0, 0);
-      } catch {
-        // If a browser refuses pixel access, the canvas still shows the video frame.
-      }
+      } catch {}
       rafRef.current = requestAnimationFrame(draw);
     };
 
     const play = () => {
-      try { video.currentTime = isOldFallback ? fallbackStartAt : startAt; } catch {}
+      try { video.currentTime = startAt; } catch {}
       video.playbackRate = playbackRate;
       video.play().catch(() => {});
       draw();
@@ -191,7 +186,7 @@ function ChromaKeyVideo({ id, sources, startAt = 0, fallbackStartAt = 0, playbac
       video.pause();
       video.removeEventListener('loadedmetadata', play);
     };
-  }, [id, activeSrc, startAt, fallbackStartAt, playbackRate, failed, isOldFallback]);
+  }, [id, activeSrc, startAt, playbackRate, failed]);
 
   const tryNextSource = () => {
     if (sourceIndex < sources.length - 1) {
