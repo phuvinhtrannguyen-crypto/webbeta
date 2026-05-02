@@ -69,9 +69,9 @@ test('_endHandUncontested clears pending river timer', () => {
   room.addPlayer('b', 'B');
   room.startHand('a');
 
-  // Force phase to turn then trigger river_intro via _advancePhase.
-  room.phase = 'turn';
-  // Simulate betting completion on turn: reset everything and advance.
+  // Force phase to c4 then trigger river_intro via _advancePhase.
+  room.phase = 'c4';
+  // Simulate betting completion on c4: reset everything and advance.
   for (const p of room.players.values()) {
     p.currentBet = 0;
     p.hasActedThisRound = true;
@@ -96,7 +96,7 @@ test('_fastForwardToShowdown during river_intro deals missing river card', () =>
   room.startHand('a');
 
   // Move state forward manually to river_intro with 4 community cards.
-  room.phase = 'turn';
+  room.phase = 'c4';
   room.community = room.deck.splice(0, 4);
   room._advancePhase();
   assert.equal(room.phase, 'river_intro');
@@ -173,7 +173,7 @@ test('_fastForwardToShowdown clears pending action timer', () => {
   room.startHand('a');
   // Simulate a pending action timer (startHand already scheduled one).
   assert.ok(scheduled.has(`action:${room.id}`), 'action timer pending');
-  room.phase = 'turn';
+  room.phase = 'c4';
   room.community = [1, 2, 3, 4].map((i) => ({ rank: i + 1, suit: 'H', code: `${i}H` }));
   room._fastForwardToShowdown();
   // Action timer must be cleared so it cannot fire during river_intro.
@@ -283,4 +283,81 @@ test('_returnToWaiting does NOT auto-start when only 1 eligible player remains',
   room._returnToWaiting();
   // Only 1 eligible (A) → must NOT auto-start; stay in 'waiting'.
   assert.equal(room.phase, 'waiting');
+});
+
+test('community cards are dealt one at a time across c1..c5', () => {
+  const { room, events } = makeRoom();
+  room.addPlayer('a', 'A');
+  room.addPlayer('b', 'B');
+  room.startHand('a');
+  // preflop -> c1 (1 card)
+  for (const p of room.players.values()) {
+    p.currentBet = 0;
+    p.hasActedThisRound = true;
+    p.status = 'playing';
+  }
+  room.currentBet = 0;
+  events.length = 0;
+  room._advancePhase();
+  assert.equal(room.phase, 'c1');
+  assert.equal(room.community.length, 1);
+
+  // c1 -> c2
+  for (const p of room.players.values()) p.hasActedThisRound = true;
+  room._advancePhase();
+  assert.equal(room.phase, 'c2');
+  assert.equal(room.community.length, 2);
+
+  // c2 -> c3
+  for (const p of room.players.values()) p.hasActedThisRound = true;
+  room._advancePhase();
+  assert.equal(room.phase, 'c3');
+  assert.equal(room.community.length, 3);
+
+  // c3 -> c4
+  for (const p of room.players.values()) p.hasActedThisRound = true;
+  room._advancePhase();
+  assert.equal(room.phase, 'c4');
+  assert.equal(room.community.length, 4);
+
+  // c4 -> river_intro (no card dealt yet, intro animation only)
+  for (const p of room.players.values()) p.hasActedThisRound = true;
+  room._advancePhase();
+  assert.equal(room.phase, 'river_intro');
+  assert.equal(room.community.length, 4);
+});
+
+test('startingStack is configurable per room (default = 1_000_000)', () => {
+  const noop = () => {};
+  const r1 = new PokerRoom({
+    id: 'X',
+    hostSocketId: null,
+    emit: noop,
+    scheduleTimer: noop,
+    clearTimer: noop,
+  });
+  assert.equal(r1.startingStack, 1_000_000);
+
+  const r2 = new PokerRoom({
+    id: 'Y',
+    hostSocketId: null,
+    emit: noop,
+    scheduleTimer: noop,
+    clearTimer: noop,
+    startingStack: 500,
+  });
+  assert.equal(r2.startingStack, 500);
+  r2.addPlayer('p', 'P');
+  assert.equal(r2.players.get('p').stack, 500);
+
+  // Garbage values fall back to default.
+  const r3 = new PokerRoom({
+    id: 'Z',
+    hostSocketId: null,
+    emit: noop,
+    scheduleTimer: noop,
+    clearTimer: noop,
+    startingStack: 'abc',
+  });
+  assert.equal(r3.startingStack, 1_000_000);
 });

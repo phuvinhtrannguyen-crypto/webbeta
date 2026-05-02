@@ -3,12 +3,18 @@
 // Phases:
 //   'waiting'        -> players can join, host can startHand
 //   'preflop'        -> hole cards dealt, betting round
-//   'flop'           -> 3 community cards, betting round
-//   'turn'           -> 4th community card, betting round
-//   'river_intro'    -> special shuffle/intro animation before 5th card (server waits briefly)
-//   'river'          -> 5th community card, betting round
+//   'c1'             -> 1st community card, betting round
+//   'c2'             -> 2nd community card, betting round
+//   'c3'             -> 3rd community card, betting round
+//   'c4'             -> 4th community card, betting round
+//   'river_intro'    -> shuffle/intro animation before 5th card (server waits)
+//   'c5'             -> 5th community card, betting round (a.k.a. river)
 //   'showdown'       -> reveal hands one by one, determine winner, award pot
 //   'finished'       -> hand over, stays briefly before returning to 'waiting'
+//
+// Note: community cards are dealt one at a time per Vietnamese spec — every
+// dealt community card is followed by a 15s betting round, not a 3+1+1
+// flop/turn/river split.
 //
 // Public events emitted via an emit(event, payload) callback set externally.
 
@@ -21,18 +27,26 @@ const RIVER_INTRO_DURATION_MS = 5_000;
 const SHOWDOWN_REVEAL_INTERVAL_MS = 1_200;
 const FINISHED_DURATION_MS = 8_000;
 
-const STARTING_STACK = 1000; // 1000 bung
+// Starting stack is configurable per-room (host picks when creating). The
+// default is intentionally large so casual play feels effectively unlimited
+// while still letting all-in/side-pot logic work normally.
+const DEFAULT_STARTING_STACK = 1_000_000;
 const SMALL_BLIND = 5;
 const BIG_BLIND = 10;
 
+export const ROOM_DEFAULTS = { startingStack: DEFAULT_STARTING_STACK };
+
 export class PokerRoom {
-  constructor({ id, hostSocketId, emit, clearTimer, scheduleTimer, onEmpty }) {
+  constructor({ id, hostSocketId, emit, clearTimer, scheduleTimer, onEmpty, startingStack }) {
     this.id = id;
     this.hostSocketId = hostSocketId;
     this.emit = emit;
     this.scheduleTimer = scheduleTimer; // (key, fn, ms) => void
     this.clearTimer = clearTimer; // (key) => void
     this.onEmpty = onEmpty || null; // callback when room becomes empty
+    // Clamp to a sane positive integer (treat 0/negative/non-finite as default).
+    const s = Number(startingStack);
+    this.startingStack = Number.isFinite(s) && s >= BIG_BLIND ? Math.floor(s) : DEFAULT_STARTING_STACK;
 
     /** @type {Map<string, Player>} */
     this.players = new Map(); // socketId -> player
@@ -62,7 +76,7 @@ export class PokerRoom {
     const player = {
       id: socketId,
       name: (name || 'Player').slice(0, 20),
-      stack: STARTING_STACK,
+      stack: this.startingStack,
       // queued | waiting | playing | folded | allin | winner | loser
       status: handActive ? 'queued' : 'waiting',
       hole: [], // [{rank, suit, code}]
@@ -262,7 +276,7 @@ export class PokerRoom {
 
   // ---------- actions ----------
   playerAction(socketId, action, amount = 0) {
-    if (!['preflop', 'flop', 'turn', 'river'].includes(this.phase)) {
+    if (!['preflop', 'c1', 'c2', 'c3', 'c4', 'c5'].includes(this.phase)) {
       throw new Error('Not a betting phase');
     }
     const actingId = this.seatOrder[this.actingIdx];
@@ -441,27 +455,33 @@ export class PokerRoom {
     this.minRaise = BIG_BLIND;
 
     if (this.phase === 'preflop') {
-      this._dealCommunity(3);
-      this.phase = 'flop';
-    } else if (this.phase === 'flop') {
       this._dealCommunity(1);
-      this.phase = 'turn';
-    } else if (this.phase === 'turn') {
-      // Special intro before river.
+      this.phase = 'c1';
+    } else if (this.phase === 'c1') {
+      this._dealCommunity(1);
+      this.phase = 'c2';
+    } else if (this.phase === 'c2') {
+      this._dealCommunity(1);
+      this.phase = 'c3';
+    } else if (this.phase === 'c3') {
+      this._dealCommunity(1);
+      this.phase = 'c4';
+    } else if (this.phase === 'c4') {
+      // Special intro before final (5th) community card.
       this.phase = 'river_intro';
       this.emit('river_intro', { state: this.publicState() });
       this.scheduleTimer(
         `river:${this.id}`,
         () => {
           this._dealCommunity(1);
-          this.phase = 'river';
+          this.phase = 'c5';
           this.emit('community_dealt', { cards: this.community, phase: this.phase });
           this._startRiverBetting();
         },
         RIVER_INTRO_DURATION_MS
       );
       return;
-    } else if (this.phase === 'river') {
+    } else if (this.phase === 'c5') {
       this._showdown();
       return;
     }
@@ -503,8 +523,9 @@ export class PokerRoom {
   }
 
   _dealCommunity(n) {
-    // Burn 1 card for realism.
-    this.deck.shift();
+    // We deal community cards one at a time per spec, so no burn card —
+    // burning before every single community card would consume too much of
+    // the 52-card deck when 20 players sit (40 hole cards already).
     for (let i = 0; i < n; i++) this.community.push(this.deck.shift());
   }
 
@@ -512,25 +533,22 @@ export class PokerRoom {
     // Stop any pending betting-round timer so a late auto-action can't
     // re-enter this function during river_intro.
     this.clearTimer(`action:${this.id}`);
-    // Deal remaining community cards quickly but still trigger river_intro if river not yet dealt.
-    if (this.phase === 'preflop') {
-      this._dealCommunity(3);
-      this.phase = 'flop';
-      this.emit('community_dealt', { cards: this.community, phase: this.phase });
-    }
-    if (this.phase === 'flop') {
+    // Deal remaining community cards quickly but still trigger river_intro before c5.
+    const advanceMap = ['preflop', 'c1', 'c2', 'c3', 'c4'];
+    while (advanceMap.includes(this.phase) && this.phase !== 'c4') {
       this._dealCommunity(1);
-      this.phase = 'turn';
+      const next = { preflop: 'c1', c1: 'c2', c2: 'c3', c3: 'c4' }[this.phase];
+      this.phase = next;
       this.emit('community_dealt', { cards: this.community, phase: this.phase });
     }
-    if (this.phase === 'turn') {
+    if (this.phase === 'c4') {
       this.phase = 'river_intro';
       this.emit('river_intro', { state: this.publicState() });
       this.scheduleTimer(
         `river:${this.id}`,
         () => {
           this._dealCommunity(1);
-          this.phase = 'river';
+          this.phase = 'c5';
           this.emit('community_dealt', { cards: this.community, phase: this.phase });
           this._showdown();
         },
@@ -539,11 +557,11 @@ export class PokerRoom {
       return;
     }
     if (this.phase === 'river_intro') {
-      // Already in intro — cancel pending river timer and deal the river ourselves
+      // Already in intro — cancel pending timer and deal the final card ourselves
       // to avoid running showdown with only 4 community cards.
       this.clearTimer(`river:${this.id}`);
       if (this.community.length < 5) this._dealCommunity(5 - this.community.length);
-      this.phase = 'river';
+      this.phase = 'c5';
       this.emit('community_dealt', { cards: this.community, phase: this.phase });
       this._showdown();
       return;
@@ -769,6 +787,7 @@ export class PokerRoom {
       dealerId: this.seatOrder[this.dealerIdx] || null,
       actingId: this.seatOrder[this.actingIdx] || null,
       actionDeadline: this.actionDeadline,
+      startingStack: this.startingStack,
       lastWinners: this.lastWinners,
       players: this.seatOrder.map((id) => {
         const p = this.players.get(id);

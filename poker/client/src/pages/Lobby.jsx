@@ -3,6 +3,9 @@ import { useState } from 'react';
 export default function Lobby({ name, setName, error, setError, onCreate, onJoin }) {
   const [joinCode, setJoinCode] = useState('');
   const [mode, setMode] = useState('home'); // home | join
+  // Default starting stack is "vô hạn" (1 triệu búng — large enough that
+  // tournament-style elimination is unlikely in casual play).
+  const [startingStack, setStartingStack] = useState(1_000_000);
 
   return (
     <div className="lobby">
@@ -28,14 +31,48 @@ export default function Lobby({ name, setName, error, setError, onCreate, onJoin
         {error ? <div className="error">{error}</div> : null}
 
         {mode === 'home' && (
-          <div className="btn-row">
-            <button className="btn btn-primary" onClick={onCreate}>
-              Tạo phòng mới
-            </button>
-            <button className="btn btn-secondary" onClick={() => setMode('join')}>
-              Vào bằng mã phòng
-            </button>
-          </div>
+          <>
+            <label className="field">
+              <span>Số búng khởi đầu mỗi người (tạo phòng mới)</span>
+              <div className="stack-row">
+                <input
+                  type="number"
+                  min={20}
+                  step={100}
+                  value={startingStack}
+                  onChange={(e) => setStartingStack(Number(e.target.value) || 0)}
+                />
+                <div className="stack-presets">
+                  {[
+                    [1000, '1k'],
+                    [10_000, '10k'],
+                    [100_000, '100k'],
+                    [1_000_000, 'Vô hạn'],
+                  ].map(([v, label]) => (
+                    <button
+                      key={v}
+                      type="button"
+                      className={`btn btn-sm ${startingStack === v ? 'on' : ''}`}
+                      onClick={() => setStartingStack(v)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </label>
+            <div className="btn-row">
+              <button
+                className="btn btn-primary"
+                onClick={() => onCreate({ startingStack })}
+              >
+                Tạo phòng mới
+              </button>
+              <button className="btn btn-secondary" onClick={() => setMode('join')}>
+                Vào bằng mã phòng
+              </button>
+            </div>
+          </>
         )}
 
         {mode === 'join' && (

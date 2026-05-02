@@ -74,7 +74,7 @@ function genRoomCode() {
   return code;
 }
 
-function makeRoom(hostSocketId) {
+function makeRoom(hostSocketId, opts = {}) {
   const id = genRoomCode();
   const room = new PokerRoom({
     id,
@@ -85,6 +85,7 @@ function makeRoom(hostSocketId) {
     onEmpty: () => {
       rooms.delete(id);
     },
+    startingStack: opts.startingStack,
   });
   rooms.set(id, room);
   return room;
@@ -131,9 +132,9 @@ function safeOn(socket, event, handler) {
 
 io.on('connection', (socket) => {
   safeOn(socket, 'create_room', (payload, cb) => {
-    const { name } = payload || {};
+    const { name, startingStack } = payload || {};
     try {
-      const room = makeRoom(socket.id);
+      const room = makeRoom(socket.id, { startingStack });
       room.addPlayer(socket.id, name);
       socket.join(room.id);
       socketToRoom.set(socket.id, room.id);

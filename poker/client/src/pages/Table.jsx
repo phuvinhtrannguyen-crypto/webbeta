@@ -6,8 +6,25 @@ import BetBar from '../components/BetBar.jsx';
 import ChatPanel from '../components/ChatPanel.jsx';
 import WinnerBanner from '../components/WinnerBanner.jsx';
 import RiverIntro from '../components/RiverIntro.jsx';
+import AudioMixer from '../components/AudioMixer.jsx';
 import { useVoiceChat } from '../hooks/useVoiceChat.js';
 import { useActionCountdown } from '../hooks/useActionCountdown.js';
+import {
+  ensureContext,
+  startMusic,
+  stopMusic,
+  isMusicPlaying,
+  playShuffle,
+  playSlam,
+  playCardFlip,
+  playChip,
+  announceRaise,
+  announceAllIn,
+  announceFold,
+  announceCheck,
+  announceCall,
+  announceWinner,
+} from '../audio/engine.js';
 
 // Generate seat positions evenly distributed around an oval. Seat 0 sits at
 // the bottom-center (the local player's POV) and the rest fill clockwise.
@@ -41,9 +58,31 @@ export default function Table({ room, setRoom, onLeave, me }) {
   const [riverIntro, setRiverIntro] = useState(false);
   const [speakingIds, setSpeakingIds] = useState(new Set());
   const [errorMsg, setErrorMsg] = useState('');
+  const [mixerOpen, setMixerOpen] = useState(false);
+  const lastCommunityLenRef = useRef(0);
+  const playersRef = useRef([]);
+  const startingStackRef = useRef(state?.startingStack);
+  if (state?.players) playersRef.current = state.players;
+  if (state?.startingStack != null) startingStackRef.current = state.startingStack;
 
   const voice = useVoiceChat(state?.players || [], me);
   const countdown = useActionCountdown(state?.actionDeadline);
+
+  // Try to start background music shortly after entering the table. Browser
+  // autoplay policy may still block until the player clicks something — in
+  // that case the mixer panel exposes a manual "Phát" button.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      try {
+        ensureContext();
+        if (!isMusicPlaying()) startMusic();
+      } catch {}
+    }, 600);
+    return () => {
+      clearTimeout(t);
+      stopMusic();
+    };
+  }, []);
 
   // Listen for game events.
   useEffect(() => {
@@ -58,18 +97,60 @@ export default function Table({ room, setRoom, onLeave, me }) {
       // don't receive one, so clearing here prevents their previous hand's
       // cards from remaining visible face-up.
       setHole([]);
+      lastCommunityLenRef.current = 0;
       setRoom((r) => (r ? { ...r, state: p } : r));
+      // Shuffle SFX at the start of every hand.
+      ensureContext();
+      playShuffle();
     };
     const onAction = (p) => {
-      setRoom((r) => (r ? { ...r, state: p.state } : r));
+      const { playerId, action, amount, state: ns } = p;
+      const actor = (playersRef.current || []).find((x) => x.id === playerId);
+      const name = actor?.name || '';
+      // Voice/SFX announcements.
+      switch (action) {
+        case 'raise':
+          announceRaise(amount);
+          break;
+        case 'bet':
+          announceRaise(amount);
+          break;
+        case 'allin':
+          announceAllIn(name);
+          break;
+        case 'fold':
+          announceFold(name);
+          break;
+        case 'check':
+          playChip();
+          announceCheck(name);
+          break;
+        case 'call':
+          playChip();
+          announceCall(amount);
+          break;
+        default:
+          playChip();
+      }
+      setRoom((r) => (r ? { ...r, state: ns } : r));
     };
     const onAuto = () => {};
     const onCommunity = ({ cards, phase }) => {
+      // SFX for each newly dealt community card.
+      const prev = lastCommunityLenRef.current;
+      const nowLen = cards.length;
+      lastCommunityLenRef.current = nowLen;
+      if (nowLen > prev) {
+        if (nowLen === 5) playSlam();
+        else playCardFlip();
+      }
       setRoom((r) => (r ? { ...r, state: { ...r.state, community: cards, phase } } : r));
     };
     const onRiverIntro = ({ state }) => {
       setRiverIntro(true);
       setRoom((r) => (r ? { ...r, state } : r));
+      // Shuffle sound during the dramatic intro.
+      playShuffle();
       setTimeout(() => setRiverIntro(false), 4800);
     };
     const onShowdown = ({ reveals, state }) => {
@@ -89,6 +170,9 @@ export default function Table({ room, setRoom, onLeave, me }) {
     const onHandEnded = (p) => {
       setWinnerInfo({ winners: p.winners, reveals: p.reveals, uncontested: p.uncontested });
       setRoom((r) => (r ? { ...r, state: p.state } : r));
+      // Winner fanfare + announcement.
+      const top = (p.winners || [])[0];
+      if (top) announceWinner(top.name, top.amount);
     };
     const onChat = (msg) => setChat((prev) => [...prev, msg]);
     const onSpeaking = ({ id, speaking }) => {
@@ -195,6 +279,16 @@ export default function Table({ room, setRoom, onLeave, me }) {
           >
             {myPlayer?.micOn ? '🎙️ Mic' : '🔇 Mic'}
           </button>
+          <button
+            className="btn btn-mixer"
+            onClick={() => {
+              ensureContext();
+              setMixerOpen(true);
+            }}
+            title="Bộ chỉnh âm"
+          >
+            🎚️
+          </button>
           <button className="btn btn-ghost" onClick={onLeave}>
             Thoát
           </button>
@@ -283,6 +377,13 @@ export default function Table({ room, setRoom, onLeave, me }) {
           />
         )}
       </footer>
+
+      <AudioMixer
+        players={state.players}
+        me={me}
+        open={mixerOpen}
+        onClose={() => setMixerOpen(false)}
+      />
     </div>
   );
 }
@@ -290,11 +391,13 @@ export default function Table({ room, setRoom, onLeave, me }) {
 function phaseLabel(phase) {
   return {
     waiting: 'Đang chờ',
-    preflop: 'Vòng 1 (Pre-flop)',
-    flop: 'Vòng 2 (Flop)',
-    turn: 'Vòng 3 (Turn)',
-    river_intro: '✨ Chuẩn bị lá cuối...',
-    river: 'Vòng 4 (River)',
+    preflop: 'Vòng 1 — Pre-flop',
+    c1: 'Vòng 2 — Lá chung 1',
+    c2: 'Vòng 3 — Lá chung 2',
+    c3: 'Vòng 4 — Lá chung 3',
+    c4: 'Vòng 5 — Lá chung 4',
+    river_intro: '✨ Chuẩn bị lá cuối…',
+    c5: 'Vòng 6 — Lá chung 5',
     showdown: 'Lật bài',
     finished: 'Đã xong ván',
   }[phase] || phase;

@@ -321,14 +321,15 @@ input {
 }
 
 .community-slot {
-  width: 72px;
-  height: 104px;
-  border-radius: 10px;
+  width: 92px;
+  height: 132px;
+  border-radius: 12px;
   border: 2px dashed rgba(255, 255, 255, 0.08);
   background: rgba(0, 0, 0, 0.2);
   display: flex;
   align-items: center;
   justify-content: center;
+  perspective: 800px;
 }
 
 .community-slot.filled {
@@ -374,23 +375,60 @@ input {
 /* ================= Card ================= */
 
 .card {
-  width: 72px;
-  height: 104px;
-  border-radius: 10px;
-  background: white;
+  width: 92px;
+  height: 132px;
+  border-radius: 12px;
+  background: linear-gradient(160deg, #ffffff 0%, #f0f3f7 60%, #e2e6ec 100%);
   position: relative;
-  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.35);
+  /* Subtle 3D / beveled look: outer drop shadow + inner highlight + edge tint */
+  box-shadow:
+    0 10px 22px rgba(0, 0, 0, 0.45),
+    0 2px 4px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.08),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.05);
+  transform: perspective(700px) rotateX(4deg);
+  transform-origin: center bottom;
   user-select: none;
+}
+
+.card::before {
+  /* Top-left highlight glaze for the 3D feel */
+  content: '';
+  position: absolute;
+  inset: 1px 1px 50% 1px;
+  border-radius: 11px 11px 0 0;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.55) 0%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  pointer-events: none;
 }
 
 .card.placeholder {
   background: rgba(255, 255, 255, 0.04);
   box-shadow: none;
+  transform: none;
+}
+
+.card.placeholder::before {
+  display: none;
 }
 
 .card.back {
-  background: repeating-linear-gradient(45deg, #7c1d2a 0 6px, #5b1320 6px 12px);
+  background:
+    radial-gradient(ellipse at 30% 25%, rgba(255, 200, 200, 0.25) 0%, transparent 60%),
+    repeating-linear-gradient(45deg, #7c1d2a 0 6px, #5b1320 6px 12px);
   border: 2px solid #1a0409;
+}
+
+.card.back::before {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.18) 0%,
+    rgba(255, 255, 255, 0) 100%
+  );
 }
 
 .card.back .card-back-pattern {
@@ -435,11 +473,11 @@ input {
 }
 
 .card-corner .rank {
-  font-size: 1.1rem;
+  font-size: 1.3rem;
 }
 
 .card-corner .suit {
-  font-size: 1rem;
+  font-size: 1.15rem;
 }
 
 .card-center {
@@ -448,7 +486,8 @@ input {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 2.2rem;
+  font-size: 2.7rem;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6);
 }
 
 .card.face.red .card-center {
@@ -1064,14 +1103,17 @@ input {
   }
   .card,
   .community-slot {
-    width: 56px;
-    height: 82px;
+    width: 70px;
+    height: 100px;
   }
   .card-corner .rank {
-    font-size: 0.9rem;
+    font-size: 1.05rem;
+  }
+  .card-corner .suit {
+    font-size: 0.95rem;
   }
   .card-center {
-    font-size: 1.6rem;
+    font-size: 2rem;
   }
 }
 
@@ -1100,17 +1142,17 @@ input {
   }
   .card,
   .community-slot {
-    width: 44px;
-    height: 64px;
+    width: 56px;
+    height: 80px;
   }
   .card-corner .rank {
-    font-size: 0.75rem;
+    font-size: 0.9rem;
   }
   .card-corner .suit {
-    font-size: 0.7rem;
+    font-size: 0.8rem;
   }
   .card-center {
-    font-size: 1.3rem;
+    font-size: 1.6rem;
   }
   .seat-card {
     min-width: 120px;
@@ -1122,5 +1164,176 @@ input {
   }
   .pot-amount {
     font-size: 1.2rem;
+  }
+}
+
+/* ================= Audio mixer overlay ================= */
+
+.btn-mixer {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--ink);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 8px 12px;
+  font-size: 1.05rem;
+}
+
+.mixer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+
+.mixer-panel {
+  width: min(540px, 92vw);
+  max-height: 86vh;
+  overflow-y: auto;
+  background: linear-gradient(180deg, #1a2030 0%, #0f1320 100%);
+  color: var(--ink);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  padding: 18px 20px;
+  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.6);
+}
+
+.mixer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.mixer-header h3 {
+  margin: 0;
+  font-size: 1.15rem;
+  letter-spacing: 0.02em;
+}
+
+.mixer-close {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--ink);
+  border-radius: 8px;
+  width: 32px;
+  height: 32px;
+}
+
+.mixer-section {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 10px 0 6px;
+}
+
+.mixer-section-title {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-dim);
+  margin-bottom: 6px;
+}
+
+.mixer-row {
+  display: grid;
+  grid-template-columns: 130px 38px 1fr 48px auto;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 0;
+}
+
+.mixer-row label {
+  color: var(--ink);
+  font-size: 0.92rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mixer-row input[type='range'] {
+  width: 100%;
+  accent-color: var(--gold);
+}
+
+.mixer-value {
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-dim);
+  font-size: 0.88rem;
+  text-align: right;
+}
+
+.mute-btn {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--ink);
+  border-radius: 8px;
+  padding: 4px 6px;
+  font-size: 0.95rem;
+}
+
+.mute-btn.muted {
+  background: rgba(239, 68, 68, 0.25);
+  color: #ffd0d0;
+}
+
+.btn.btn-sm {
+  padding: 4px 10px;
+  font-size: 0.82rem;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--ink);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.btn.btn-sm.on {
+  background: linear-gradient(180deg, #facc15, #d4af37);
+  color: #1a1400;
+  border-color: transparent;
+}
+
+.mixer-empty {
+  color: var(--ink-dim);
+  font-size: 0.88rem;
+  padding: 6px 0;
+}
+
+.mixer-foot {
+  margin-top: 10px;
+  font-size: 0.78rem;
+  color: var(--ink-dim);
+  text-align: center;
+}
+
+/* ================= Lobby starting-stack picker ================= */
+
+.stack-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.stack-row input[type='number'] {
+  flex: 1 1 140px;
+  min-width: 140px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: var(--ink);
+}
+
+.stack-presets {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 600px) {
+  .mixer-row {
+    grid-template-columns: 110px 32px 1fr 40px;
+  }
+  .mixer-row .btn.btn-sm {
+    grid-column: 1 / -1;
+    justify-self: end;
   }
 }
