@@ -59,7 +59,8 @@ function AllInCinematic({ fx }) {
       <div className="fx-clean-vortex" />
       <div className="fx-clean-ring r1" />
       <div className="fx-clean-ring r2" />
-      <KeyedSkullVideo id={`allin-keyed-${fx.fxKey}`} src={ALL_IN_VIDEO_SRC} playbackRate={1.12} />
+      <KeyedSkullVideo src={ALL_IN_VIDEO_SRC} playbackRate={1.12} />
+      <AudioFx id={`allin-audio-${fx.fxKey}`} src={ALL_IN_VIDEO_SRC} playbackRate={1.12} />
       <div className="fx-clean-copy">
         <div className="fx-clean-kicker">ALL IN</div>
         <div className="fx-clean-player">{fx.name}</div>
@@ -84,7 +85,7 @@ function EndCinematic({ fx }) {
   );
 }
 
-function KeyedSkullVideo({ id, src, playbackRate = 1 }) {
+function KeyedSkullVideo({ src, playbackRate = 1 }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const rafRef = useRef(0);
@@ -93,8 +94,6 @@ function KeyedSkullVideo({ id, src, playbackRate = 1 }) {
     const video = videoRef.current;
     const canvas = canvasRef.current;
     if (!video || !canvas) return undefined;
-
-    registerExternalMediaElement(id, video, 'sfx');
 
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     const size = 720;
@@ -111,7 +110,6 @@ function KeyedSkullVideo({ id, src, playbackRate = 1 }) {
       const vh = video.videoHeight || 1280;
       const base = Math.min(vw, vh);
 
-      // Tight crop around the skull/brain only; avoids showing the full clip.
       const sourceSize = Math.max(240, base * 0.46);
       const targetX = vw * 0.5;
       const targetY = vh * 0.58;
@@ -134,44 +132,51 @@ function KeyedSkullVideo({ id, src, playbackRate = 1 }) {
           const greenRatio = g / Math.max(1, maxRB);
 
           const removeGreen =
-            (g > 48 && greenLead > 12 && greenRatio > 1.08) ||
-            (g > 95 && r < 150 && b < 150);
+            (g > 44 && greenLead > 10 && greenRatio > 1.06) ||
+            (g > 88 && r < 160 && b < 160);
 
           if (removeGreen) {
-            const strength = Math.min(255, Math.max(0, greenLead * 6));
+            const strength = Math.min(255, Math.max(0, greenLead * 7));
             data[i + 3] = Math.max(0, 255 - strength);
           }
         }
 
         ctx.putImageData(frame, 0, 0);
-      } catch {}
+      } catch {
+        // Keep rendering even if one frame cannot be processed.
+      }
 
       rafRef.current = requestAnimationFrame(draw);
     };
 
     const play = () => {
       try { video.currentTime = 0; } catch {}
-      video.muted = false;
-      video.volume = 1;
+      video.muted = true;
+      video.defaultMuted = true;
+      video.volume = 0;
       video.playbackRate = playbackRate;
       video.play().catch(() => {});
       draw();
     };
 
+    video.muted = true;
+    video.defaultMuted = true;
+    video.setAttribute('muted', '');
+    video.setAttribute('playsinline', '');
+
     if (video.readyState >= 1) play();
     else video.addEventListener('loadedmetadata', play, { once: true });
 
     return () => {
-      unregisterExternalMediaElement(id);
       cancelAnimationFrame(rafRef.current);
       video.pause();
       video.removeEventListener('loadedmetadata', play);
     };
-  }, [id, src, playbackRate]);
+  }, [src, playbackRate]);
 
   return (
     <>
-      <video ref={videoRef} className="fx-key-source" src={src} playsInline preload="auto" />
+      <video ref={videoRef} className="fx-key-source" src={src} muted playsInline autoPlay preload="auto" />
       <canvas ref={canvasRef} className="fx-key-canvas" />
     </>
   );
