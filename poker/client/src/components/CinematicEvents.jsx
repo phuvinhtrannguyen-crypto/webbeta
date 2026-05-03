@@ -110,6 +110,7 @@ function KeyedSkullVideo({ src, playbackRate = 1 }) {
       const vh = video.videoHeight || 1280;
       const base = Math.min(vw, vh);
 
+      // Crop only the skull/brain area, not the whole clip.
       const sourceSize = Math.max(240, base * 0.46);
       const targetX = vw * 0.5;
       const targetY = vh * 0.58;
@@ -143,7 +144,7 @@ function KeyedSkullVideo({ src, playbackRate = 1 }) {
 
         ctx.putImageData(frame, 0, 0);
       } catch {
-        // Keep rendering even if one frame cannot be processed.
+        // Keep the animation running even if one frame cannot be processed.
       }
 
       rafRef.current = requestAnimationFrame(draw);
@@ -159,6 +160,8 @@ function KeyedSkullVideo({ src, playbackRate = 1 }) {
       draw();
     };
 
+    // Critical mobile fix: keep the visual source muted so Safari/Android allows autoplay.
+    // Audio is played by a separate registered AudioFx element.
     video.muted = true;
     video.defaultMuted = true;
     video.setAttribute('muted', '');
