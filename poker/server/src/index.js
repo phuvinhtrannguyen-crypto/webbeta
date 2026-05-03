@@ -7,6 +7,9 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import fs from 'node:fs';
 import { PokerRoom } from './game/room.js';
+import { disableAutoStart } from './game/manualModePatch.js';
+
+disableAutoStart(PokerRoom);
 
 const PORT = Number(process.env.PORT || 3001);
 const ORIGIN = process.env.CLIENT_ORIGIN || '*';
