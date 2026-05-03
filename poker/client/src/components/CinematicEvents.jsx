@@ -54,12 +54,12 @@ export default function CinematicEvents() {
 
 function AllInCinematic({ fx }) {
   return (
-    <div className="fx-full fx-allin-video" aria-live="polite">
+    <div className="fx-full fx-allin-clean" aria-live="polite">
       <div className="fx-clean-backdrop" />
       <div className="fx-clean-vortex" />
       <div className="fx-clean-ring r1" />
       <div className="fx-clean-ring r2" />
-      <VideoFx id={`allin-video-${fx.fxKey}`} src={ALL_IN_VIDEO_SRC} playbackRate={1.12} />
+      <KeyedSkullVideo id={`allin-keyed-${fx.fxKey}`} src={ALL_IN_VIDEO_SRC} playbackRate={1.12} />
       <div className="fx-clean-copy">
         <div className="fx-clean-kicker">ALL IN</div>
         <div className="fx-clean-player">{fx.name}</div>
@@ -84,50 +84,124 @@ function EndCinematic({ fx }) {
   );
 }
 
-function VideoFx({ id, src, playbackRate = 1 }) {
-  const ref = useRef(null);
+function KeyedSkullVideo({ id, src, playbackRate = 1 }) {
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const rafRef = useRef(0);
+
   useEffect(() => {
-    const el = ref.current;
-    if (!el) return undefined;
-    registerExternalMediaElement(id, el, 'sfx');
-    const play = () => {
-      try { el.currentTime = 0; } catch {}
-      el.muted = false;
-      el.volume = 1;
-      el.playbackRate = playbackRate;
-      el.play().catch(() => {});
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas) return undefined;
+
+    registerExternalMediaElement(id, video, 'sfx');
+
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    const size = 720;
+    canvas.width = size;
+    canvas.height = size;
+
+    const draw = () => {
+      if (!ctx || video.readyState < 2) {
+        rafRef.current = requestAnimationFrame(draw);
+        return;
+      }
+
+      const vw = video.videoWidth || 720;
+      const vh = video.videoHeight || 1280;
+      const base = Math.min(vw, vh);
+
+      // Tight crop around the skull/brain only; avoids showing the full clip.
+      const sourceSize = Math.max(240, base * 0.46);
+      const targetX = vw * 0.5;
+      const targetY = vh * 0.58;
+      const sx = Math.min(vw - sourceSize, Math.max(0, targetX - sourceSize / 2));
+      const sy = Math.min(vh - sourceSize, Math.max(0, targetY - sourceSize / 2));
+
+      ctx.clearRect(0, 0, size, size);
+      ctx.drawImage(video, sx, sy, sourceSize, sourceSize, 0, 0, size, size);
+
+      try {
+        const frame = ctx.getImageData(0, 0, size, size);
+        const data = frame.data;
+
+        for (let i = 0; i < data.length; i += 4) {
+          const r = data[i];
+          const g = data[i + 1];
+          const b = data[i + 2];
+          const maxRB = Math.max(r, b);
+          const greenLead = g - maxRB;
+          const greenRatio = g / Math.max(1, maxRB);
+
+          const removeGreen =
+            (g > 48 && greenLead > 12 && greenRatio > 1.08) ||
+            (g > 95 && r < 150 && b < 150);
+
+          if (removeGreen) {
+            const strength = Math.min(255, Math.max(0, greenLead * 6));
+            data[i + 3] = Math.max(0, 255 - strength);
+          }
+        }
+
+        ctx.putImageData(frame, 0, 0);
+      } catch {}
+
+      rafRef.current = requestAnimationFrame(draw);
     };
-    if (el.readyState >= 1) play();
-    else el.addEventListener('loadedmetadata', play, { once: true });
+
+    const play = () => {
+      try { video.currentTime = 0; } catch {}
+      video.muted = false;
+      video.volume = 1;
+      video.playbackRate = playbackRate;
+      video.play().catch(() => {});
+      draw();
+    };
+
+    if (video.readyState >= 1) play();
+    else video.addEventListener('loadedmetadata', play, { once: true });
+
     return () => {
       unregisterExternalMediaElement(id);
-      el.pause();
-      el.removeEventListener('loadedmetadata', play);
+      cancelAnimationFrame(rafRef.current);
+      video.pause();
+      video.removeEventListener('loadedmetadata', play);
     };
   }, [id, src, playbackRate]);
 
-  return <video ref={ref} className="fx-allin-video-el" src={src} playsInline autoPlay preload="auto" />;
+  return (
+    <>
+      <video ref={videoRef} className="fx-key-source" src={src} playsInline preload="auto" />
+      <canvas ref={canvasRef} className="fx-key-canvas" />
+    </>
+  );
 }
 
 function AudioFx({ id, src, playbackRate = 1 }) {
   const ref = useRef(null);
+
   useEffect(() => {
     const el = ref.current;
     if (!el) return undefined;
+
     registerExternalMediaElement(id, el, 'sfx');
+
     const play = () => {
       try { el.currentTime = 0; } catch {}
       el.playbackRate = playbackRate;
       el.play().catch(() => {});
     };
+
     if (el.readyState >= 1) play();
     else el.addEventListener('loadedmetadata', play, { once: true });
+
     return () => {
       unregisterExternalMediaElement(id);
       el.pause();
       el.removeEventListener('loadedmetadata', play);
     };
   }, [id, src, playbackRate]);
+
   return <audio ref={ref} className="fx-audio" src={src} preload="auto" />;
 }
 
